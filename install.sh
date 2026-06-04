@@ -94,10 +94,20 @@ detect_deps() {
 
     # Tesseract（OCR 需要）
     if command -v tesseract &>/dev/null; then
-        ok "tesseract 已安装"
+        TESS_VER=$(tesseract --version 2>&1 | head -1 | awk '{print $2}')
+        ok "tesseract ${TESS_VER:-已安装}"
     else
         warn "tesseract 未安装（OCR 需要）"
         echo "  安装: sudo apt install tesseract-ocr tesseract-ocr-chi-sim"
+    fi
+
+    # yt-dlp（视频/音频下载引擎）
+    if command -v yt-dlp &>/dev/null; then
+        YTDLP_VER=$(yt-dlp --version 2>/dev/null || echo "未知")
+        ok "yt-dlp $YTDLP_VER"
+    else
+        warn "yt-dlp 未安装（视频采集需要）"
+        echo "  安装: pip install yt-dlp"
     fi
 }
 

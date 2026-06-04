@@ -34,7 +34,7 @@
 | 1 | **douyin_video_intake** | 脚本 | ⭐⭐⭐⭐⭐ | 抖音视频元数据+字幕+ASR |
 | 2 | **social_video_intake** | 脚本 | ⭐⭐⭐⭐⭐ | 通用社交视频统一入口 |
 | 3 | **universal-video-analyzer** | 技能 | ⭐⭐⭐⭐⭐ | 多语言OCR/人脸/质量/BGM/情感分析 |
-| 4 | **yt-dlp** | CLI | ⭐⭐⭐⭐ | 视频/音频下载（YouTube/抖音/B站等数千网站） |
+| 4 | **yt-dlp** | CLI | ⭐⭐⭐⭐ | 视频/音频下载（YouTube/抖音/B站等数千网站）目前版本 **2026.3.17** |
 | 5 | **Whisper ASR** | 引擎 | ⭐⭐⭐⭐ | 99+语言语音转文字 |
 | 6 | **EasyOCR** | 引擎 | ⭐⭐⭐ | 视频关键帧画面文字提取 |
 | 7 | **FFmpeg** | CLI | ⭐⭐⭐ | 视频切分/截图/转码/音频提取 |

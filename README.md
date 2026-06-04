@@ -1,88 +1,50 @@
-# Knowledge and Memory Management （测试版稳定性还有待改进） 
+# Knowledge and Memory Management（知识和记忆体管理）
 
-知识和记忆体管理插件 — 为已安装 [Hermes Memory Installer](https://github.com/mage0535/hermes-memory-installer)（或兼容记忆体系统）的 AI Agent 添加**知识采集、笔记/RAG 管理、云盘同步**能力。
+超越「记住」——**知识采集 → 笔记生成 → 语义检索 → 云盘同步** 全链路插件扩展。
 
-> ## 两层关系
->
-> | 项目 | 定位 | 功能 |
-> |------|------|------|
-> | **[hermes-memory-installer](https://github.com/mage0535/hermes-memory-installer)** | 记忆体底座 | Hot/Warm/Cold 三层记忆 + Hindsight + gbrain + 会话持久化 |
-> | **本插件** | 能力扩展层 | 知识采集（网页/视频/文章）+ 笔记/RAG + 云盘同步 |
->
-> **记忆体底座**解决"记住"的问题，**本插件**解决"知识从哪来、存到哪去"的问题。
+> 📦 **定位**：[hermes-memory-installer](https://github.com/mage0535/hermes-memory-installer) 的能力扩展层。
+> 底座解决「记住」，KMM 解决「知识从哪来、如何用」。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![yt-dlp 2026.3](https://img.shields.io/badge/yt--dlp-2026.3-green)](https://github.com/yt-dlp/yt-dlp)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/mage0535/Knowledge-and-Memory-Management/pulls)
 
 ---
 
-## 适用场景
-
-你已安装了 [Hermes Memory Installer](https://github.com/mage0535/hermes-memory-installer)（或等效的记忆体系统），现在想进一步：
-
-- ✅ **知识采集** — 从网页、视频、文章、社交媒体自动采集知识，采集即入库
-- ✅ **笔记/RAG 管理** — 结构化笔记 + 三级知识域（个人/共享/归档）+ gbrain 自动索引
-- ✅ **云盘同步** — 笔记和知识库自动同步到 OneDrive / Google Drive / 阿里云盘等 12+ 云盘
-- ✅ **关键词分析扩展** — 自动提取、交叉验证、扩展关联知识
-- ✅ **笔记自动生成** — 从原始材料（网页/视频/文章）经 AI 提炼为结构化笔记
-
-## 架构
+## 架构总览
 
 ```
-  AI Agent（你的 Hermes / Claude Code / Cursor 等）
-       │
-       ▼
-┌──────────────────────────────────────────────────────────┐
-│  🔌 本插件：Knowledge and Memory Management              │
-│                                                          │
-│  ┌──────────────────┐  ┌─────────────┐  ┌──────────┐   │
-│  │  知识采集         │  │ 笔记/RAG     │  │ 云盘同步  │   │
-│  │  web/video/文章   │  │ 三级知识域   │  │ rclone   │   │
-│  │  分析/笔记生成    │  │ gbrain 索引  │  │ 12+ 云盘 │   │
-│  └──────────────────┘  └─────────────┘  └──────────┘   │
-└──────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────────────────────────┐
-│  记忆体底座：hermes-memory-installer                      │
-│  Hot(memory) → Warm(Hindsight) → Cold(gbrain + FTS5)    │
-└──────────────────────────────────────────────────────────┘
+采集层（30+ 工具）  →  分析层（AI 处理）  →  存储层（三层记忆）
+   │                        │                       │
+   ├─ 网页引擎(9)           ├─ 笔记自动生成        ├─ Hot(Memory)
+   ├─ 视频引擎(10)          ├─ 知识图谱提取        ├─ Warm(Hindsight)
+   ├─ 文章/内容(10)         ├─ NLI 事实核查        └─ Cold(gbrain)
+   ├─ 文档/OCR(5)           └─ 多模态分析
+   └─ 知识检索/分析(7)
+                                            ┌─ OneDrive / Google Drive
+                                            ├─ 阿里云盘 / 百度网盘
+              云盘同步层（rclone, 12+ 驱动）──┼─ Dropbox / Mega / pCloud
+                                            ├─ WebDAV / S3 / 天翼云
+                                            └─ 更多 rclone 支持的所有驱动
 ```
 
-## 快速安装
+---
 
-```bash
-# 前提：已安装记忆体底座
-git clone https://github.com/mage0535/Knowledge-and-Memory-Management.git
-cd Knowledge-and-Memory-Management
-chmod +x install.sh
-./install.sh
-```
+## 模块组成
 
-安装过程：
-1. ✅ 检测记忆体底座（gbrain + Hindsight）是否就绪
-2. ✅ 检测运行环境（Python / rclone / ffmpeg / tesseract）
-3. ✅ 创建知识库目录结构
-4. ✅ 部署知识采集模块（网页/视频/文章/分析/笔记生成）
-5. ✅ 部署笔记/RAG 管理模块
-6. ✅ 部署云盘同步引擎
-7. ✅ 可选：交互式配置云盘
-8. ✅ 注册定时同步（每 30 分钟笔记 → 云盘）
+| 模块 | 目录 | 功能 |
+|------|------|------|
+| **知识采集器** | `src/knowledge_collector/` | 7 个子模块覆盖网页/视频/文章/文档/分析/笔记生成 |
+| **笔记 RAG** | `src/notes_rag/` | 语义搜索、向量检索、上下文召回 |
+| **云盘同步** | `src/cloud_sync/` | rclone 统一驱动，12+ 云盘 |
+| **采集管线** | `docs/collection-pipeline.md` | 详细工具说明和链路图 |
+| **工具版本** | `docs/tool-versions.md` | 已验证工具链版本表 |
+| **快速开始** | `docs/quick-start.md` | 安装和第一个采集 |
 
-### 验证
+---
 
-```bash
-./scripts/verify_plugin.sh
-```
-
-### 卸载
-
-```bash
-./uninstall.sh
-```
-
-## 功能模块
-
-### 知识采集 (src/knowledge_collector/)
-
-**30+ 采集分析工具全集：**
+## 30+ 采集分析工具全集
 
 | 模块 | 工具数量 | 核心工具 |
 |------|----------|----------|
@@ -90,75 +52,63 @@ chmod +x install.sh
 | **视频采集** | 10 | douyin_video_intake / social_video_intake / universal-video-analyzer / yt-dlp / Whisper ASR / EasyOCR / FFmpeg / Tesseract / YouTube Analytics / 抖音热榜 |
 | **文章/内容** | 10 | 微信公众文章 / 微博 / 新闻聚合(多源) / tech-news / AI中文日报 / blogwatcher / GitHub Trending / 通用网络文档 / 多格式文档解析 |
 | **文档/OCR** | 5 | umi_ocr_bridge / doc_parse_router / Magic-PDF / MinerU / book_cache_manager(710+书) |
-| **知识分析** | 7 | web_search(多后端) / web_extract / NLI事实核查 / 评论摘要 / 新闻丰富 / 关键词提取 / 多源交叉验证 |
-| **笔记生成** | 全链路 | LLM结构化 → 本地笔记 → gbrain知识图谱 → 云盘同步 |
-| **知识图谱** | 8 MCP | gbrain_put_page / gbrain_query / gbrain_add_link / gbrain_add_tag / gbrain_traverse_graph / gbrain_file_upload / gbrain-link-orphans |
-| **采集编排** | 统一调度 | 多源并行/去重/避撞/定时同步 |
+| **知识分析** | 7 | web_search / web_extract / NLI 事实核查 / 评论摘要 / 新闻丰富 / 关键词提取 / 交叉验证 |
 
-### 笔记/RAG (src/notes_rag/)
+> 详细工具调用链路见 [采集管线](docs/collection-pipeline.md)。
 
-- **三级知识域**：个人(personal) → 共享(shared) → 归档(archive)
-- **自动索引**：笔记创建即进入 gbrain，自动链接关联节点
-- **混合检索**：语义搜索 + 关键词 + 图遍历
+---
 
-### 云盘同步 (src/cloud_sync/)
+## 快速安装
 
-基于 **rclone** 统一驱动的 12+ 云盘：
+```bash
+# 要求：已安装 hermes-memory-installer
+# 确保 Hermes 虚拟环境激活
+source ~/.hermes/hermes-agent/.venv/bin/activate
 
-| 云盘 | 配置方式 | 推荐用途 |
-|------|----------|----------|
-| OneDrive | OAuth ✅ | 笔记主存储 |
-| Google Drive | OAuth | 备份/共享 |
-| 阿里云盘 | Token | 文件存储 |
-| 百度云盘 | OAuth | 存档 |
-| 坚果云 | WebDAV ✓ | 轻量同步 |
-| Dropbox | OAuth | 国际协作 |
-| Mega | 账号密码 | 加密存储 |
-| Nextcloud | WebDAV ✓ | 自建私有云 |
-| iCloud Drive | OAuth+2FA | Apple 生态 |
-| 天翼云盘 | 账号密码 | 国内备份 |
-| 115 网盘 | Cookie | 离线下载 |
-| 夸克网盘 | WebDAV(桥接) | 大文件 |
+# 克隆仓库
+git clone https://github.com/mage0535/Knowledge-and-Memory-Management.git
+cd Knowledge-and-Memory-Management
 
-## 项目结构
-
-```
-├── install.sh                    ← 一键安装入口
-├── uninstall.sh                  ← 干净卸载
-├── plugin.yaml                   ← 插件元数据
-├── AGENTS.md                     ← AI Agent 接入指南
-├── requirements.txt              ← Python 依赖
-├── docs/
-│   ├── quick-start.md            ← 5 分钟上手
-│   ├── cloud-sync.md             ← 云盘配置完整指南
-│   └── collection-pipeline.md    ← 采集管线配置
-├── src/
-│   ├── knowledge_collector/      ← 知识采集
-│   │   ├── web.py
-│   │   ├── video.py
-│   │   ├── article.py
-│   │   ├── analysis.py
-│   │   └── note_generator.py
-│   ├── notes_rag/                ← 笔记/RAG 管理
-│   └── cloud_sync/               ← 云盘同步引擎
-├── scripts/
-│   ├── verify_plugin.sh          ← 安装验证
-│   └── install_rclone_drives.sh  ← 云盘一键配置
-├── config/
-│   ├── storage-policy.yaml       ← 存储策略模板
-│   └── collection-schedule.yaml  ← 采集调度模板
-└── tests/
+# 运行安装程序
+bash install.sh
 ```
 
-## 内存与磁盘占用（预估）
+安装程序会：
+1. 检测 Hermes 环境（venv、gbrain、Hindsight）
+2. 安装/升级 Python 依赖（yt-dlp、scrapling 等）
+3. 检测系统工具（ffmpeg、tesseract、rclone）
+4. 配置云盘同步规则
+5. 注册定时知识采集 cron 任务
 
-| 组件 | 占用 |
-|------|------|
-| Python 模块（源码） | < 1MB |
-| 笔记目录（初始） | ~100KB |
-| 知识采集缓存 | 按需（可配置上限） |
-| 定时同步 | 无驻留进程 |
+---
+
+## 云盘同步
+
+支持 12+ 云盘驱动，全部通过 rclone 统一接口：
+
+| 云盘 | 认证方式 | 配置 |
+|------|----------|------|
+| OneDrive | OAuth | `rclone config` |
+| Google Drive | OAuth | `rclone config` |
+| 阿里云盘 | Token | `rclone config` |
+| 百度网盘 | OAuth | `rclone config` |
+| Dropbox | OAuth | `rclone config` |
+| Mega | Password | `rclone config` |
+| pCloud | OAuth | `rclone config` |
+| 天翼云 | Cookie | `rclone config` |
+| 123云盘 | Password | `rclone config` |
+| S3 | Access Key | `rclone config` |
+| WebDAV | Password | `rclone config` |
+| 更多 | 详见 rclone 文档 | `rclone config` |
+
+---
 
 ## 许可证
 
-MIT
+MIT License © 2026
+
+---
+
+## 相关项目
+
+- [hermes-memory-installer](https://github.com/mage0535/hermes-memory-installer) — Hermes 三层记忆体安装器（底座）
