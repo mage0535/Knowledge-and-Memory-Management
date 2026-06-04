@@ -1,0 +1,7 @@
+pip3 install --quiet \
+  requests \
+  markdownify \
+  beautifulsoup4 \
+  lxml \
+  pyyaml \
+  rclone-python 2>/dev/null || echo "部分可选依赖安装失败"
