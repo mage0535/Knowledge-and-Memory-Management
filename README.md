@@ -1,4 +1,4 @@
-# Knowledge and Memory Management
+# Knowledge and Memory Management （测试版稳定性还有待改进） 
 
 知识和记忆体管理插件 — 为已安装 [Hermes Memory Installer](https://github.com/mage0535/hermes-memory-installer)（或兼容记忆体系统）的 AI Agent 添加**知识采集、笔记/RAG 管理、云盘同步**能力。
 
