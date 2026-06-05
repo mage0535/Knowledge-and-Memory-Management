@@ -35,10 +35,10 @@
 
 | 模块 | 目录 | 功能 |
 |------|------|------|
-| **知识采集器** | `src/knowledge_collector/` | 7 个子模块覆盖网页/视频/文章/文档/分析/笔记生成 |
+| **知识采集器** | `src/knowledge_collector/` | 8 个子模块覆盖网页/视频/文章/文档/分析/笔记生成/知识精炼 |
 | **笔记 RAG** | `src/notes_rag/` | 语义搜索、向量检索、上下文召回 |
 | **云盘同步** | `src/cloud_sync/` | rclone 统一驱动，12+ 云盘 |
-| **采集管线** | `docs/collection-pipeline.md` | 详细工具说明和链路图 |
+| **采集管线** | `docs/collection-pipeline.md` | 详细工具说明和链路图（含知识精炼） |
 | **工具版本** | `docs/tool-versions.md` | 已验证工具链版本表 |
 | **快速开始** | `docs/quick-start.md` | 安装和第一个采集 |
 

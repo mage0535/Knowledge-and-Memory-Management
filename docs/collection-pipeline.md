@@ -88,6 +88,47 @@
 | 知识图谱 | gbrain MCP | `gbrain_put_page` + `add_link` + `add_tag` |
 | 云盘同步 | rclone | OneDrive/Google Drive等12+云盘 |
 
+## 7. 知识精炼（新增）
+
+从原始文档中提取结构化知识，输出为可加载的 Hermes Skill + KMM 精炼笔记。
+
+| # | 工具 | 能力等级 | 说明 |
+|---|------|----------|------|
+| 1 | **book_to_skill 管线** | ⭐⭐⭐⭐⭐ | PDF/EPUB → 结构化输出（glossary + patterns + cheatsheet + 章节索引） |
+| 2 | **pdfplumber 引擎** | ⭐⭐⭐⭐ | 表格保留提取（技术书首选） |
+| 3 | **pdftotext 引擎** | ⭐⭐⭐⭐ | 快速文本提取（极速，适合纯文字书） |
+| 4 | **双引擎降级链** | ⭐⭐⭐⭐ | pdfplumber → pdftotext → pdfminer 自动降级 |
+| 5 | **章节自动分割** | ⭐⭐⭐⭐ | 章节标题识别 + 页分割 + 字符分割三层策略 |
+
+**输出架构：**
+
+```
+采集（原始 PDF）  →  提取（双引擎）  →  分析（章节分割）
+                                          ↓
+                              ┌─────────────────────┐
+                              │ Hermes Skill         │  →  按需加载章节
+                              │ KMM 精炼笔记          │  →  glossary + patterns + cheatsheet
+                              └─────────────────────┘
+```
+
+**使用方式：**
+
+```bash
+# 完整管线（推荐）
+python3 /root/.hermes/scripts/book_to_skill.py all <file.pdf> --name <slug>
+
+# 仅 Hermes Skill
+python3 /root/.hermes/scripts/book_to_skill.py forge <file.pdf> --name <slug>
+
+# 仅 KMM 精炼笔记
+python3 /root/.hermes/scripts/book_to_skill.py refine <file.pdf> --name <slug>
+
+# 查看已精炼的知识
+python3 -c "from src.knowledge_collector.refinement import list_refined; print(list_refined())"
+```
+
+**借鉴来源：** [virgiliojr94/book-to-skill](https://github.com/virgiliojr94/book-to-skill) — 编译时知识结构化理念。
+
 ## 7. 知识图谱（gbrain 集成）
 
 | 操作 | MCP 工具 | 说明 |
