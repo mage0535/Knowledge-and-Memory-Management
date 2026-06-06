@@ -53,8 +53,9 @@
 | **视频采集** | 10 | douyin_video_intake / social_video_intake / universal-video-analyzer / yt-dlp / Whisper ASR / EasyOCR / **PaddleOCR** / FFmpeg / Tesseract / YouTube Analytics / 抖音热榜 |
 | **文章/内容** | 10 | 微信公众文章 / 微博 / 新闻聚合(多源) / tech-news / AI中文日报 / blogwatcher / GitHub Trending / 通用网络文档 / 多格式文档解析 |
 | **文档/OCR** | 6 | umi_ocr_bridge / doc_parse_router / Magic-PDF / MinerU / book_cache_manager(710+书) / **PaddleOCR**(70k⭐高精度OCR) |
-| **知识分析** | 7 | web_search / web_extract / NLI 事实核查 / 评论摘要 / 新闻丰富 / 关键词提取 / 交叉验证 |
-| **SDD 开发** | 1 | **Spec-Kit**(Spec-Driven Development 7步工作流) / **Copilot-SDK**(GitHub Copilot Agent集成) |
+|| **知识检索/分析** | 7 | web_search / web_extract / NLI 事实核查 / 评论摘要 / 新闻丰富 / 关键词提取 / 交叉验证 |
+|| **知识增广（新增）** | 3+ | ✅ **AnySearch 垂直搜索回落**（搜笔记→不中→自动搜全网） |
+|| **SDD 开发** | 1 | **Spec-Kit**(Spec-Driven Development 7步工作流) / **Copilot-SDK**(GitHub Copilot Agent集成) |
 | **安全审计** | 1 | **trivy**(文件/镜像/仓库安全扫描) |
 
 > 2026-06-06 新增: PaddleOCR(v3.6.0, 70k⭐) 高精度OCR引擎; Trivy(v0.71.0, 24k⭐) 安全扫描器; Spec-Kit 规范驱动开发; Copilot-SDK(v1.0.0, 9.2k⭐) Agent SDK。详见 Hermes tool_manifest.yaml external_tools_2026_06_06 节。
@@ -84,6 +85,68 @@ bash install.sh
 3. 检测系统工具（ffmpeg、tesseract、rclone）
 4. 配置云盘同步规则
 5. 注册定时知识采集 cron 任务
+
+---
+
+## 知识增广（Knowledge Augmentation）
+
+**当本地笔记不够用，自动走 AnySearch 垂直搜索补全。**
+
+### 搜索链路
+
+```
+用户搜索 → search_notes("比亚迪 2026Q1 财报")
+    │
+    ├─ 本地命中 (score ≥ 0.6) → 直接返回笔记结果
+    │
+    └─ 本地不足 (score < 0.6) → AnySearch 垂直搜索
+         ├─ domain=finance (财务数据)
+         ├─ domain=academic (论文)
+         ├─ domain=code (技术文档)
+         └─ 结果自动标注来源 web，可导入笔记库
+```
+
+### 安装（Hermes 环境）
+
+```bash
+# 1. 设置 API Key（免费注册: https://anysearch.com/console/api-keys）
+export ANYSEARCH_API_KEY="as_sk_xxxx"
+
+# 2. 安装 Hermes MCP 集成（推荐）
+# 在 ~/.hermes/config.yaml 添加:
+# mcp_servers:
+#   anysearch:
+#     url: https://api.anysearch.com/mcp
+#     headers:
+#       Authorization: "Bearer ${ANYSEARCH_API_KEY}"
+
+# 3. 非 Hermes 环境（Python 直连）
+source ~/.hermes/hermes-agent/.venv/bin/activate
+pip install requests
+python -c "
+from knowledge_augmentation import AugmentedSearch
+s = AugmentedSearch()
+r = s.search('中国 2026 年 GDP 预测', domain='finance')
+print(r['source'], '-', len(r['results']), '条结果')
+"
+```
+
+### 配置项
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `ANYSEARCH_API_KEY` | — | AnySearch API Key |
+| `ANYSEARCH_ENDPOINT` | `https://api.anysearch.com/mcp` | MCP 端点 |
+| `KNA_FALLBACK_THRESHOLD` | `0.6` | 本地相似度低于此值才走 web |
+| `KNA_LOCAL_FIRST` | `true` | 是否优先搜本地 |
+
+### 模块结构
+
+| 文件 | 功能 |
+|------|------|
+| `config.py` | 配置加载（环境变量 / .env） |
+| `anysearch_client.py` | AnySearch MCP 直连客户端（纯 requests，零额外依赖） |
+| `augmented_search.py` | 搜索增广器（本地优先 + AnySearch 回落） |
 
 ---
 

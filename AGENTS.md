@@ -37,6 +37,14 @@
 | `sync_to_cloud(local, remote)` | 同步到云盘 |
 | `sync_from_cloud(remote, local)` | 从云盘同步 |
 
+### knowledge_augmentation (知识增广 - 新增)
+
+| 函数 | 功能 |
+|------|------|
+| `augmented_search(query, domain)` | 本地优先 + AnySearch 回落搜索 |
+| `augmented_search.list_domains()` | 查询 AnySearch 全部垂直领域 |
+| `config.load_config()` | 加载 AnySearch 配置 |
+
 ## 工作流示例
 
 ```
