@@ -97,3 +97,11 @@ ffmpeg -version | head -1
 tesseract --version | head -1
 rclone version | head -1
 ```
+
+## 新增：方法论蒸馏管线（2026-06-07）
+
+| 组件 | 版本/状态 | 说明 |
+|------|-----------|------|
+| distill_methodologies.py | v1.0 | 每日知识→方法论蒸馏工具 |
+| Horizon MCP | active | 知识采集源 (HN + TechCrunch + ArsTechnica) |
+| methodology-cron | 02:00 daily | 采集→蒸馏→gbrain 全自动 |
