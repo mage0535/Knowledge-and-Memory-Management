@@ -15,12 +15,13 @@
 ## 架构总览
 
 ```
-采集层（30+ 工具）  →  分析层（AI 处理）  →  存储层（三层记忆）
+采集层（35+ 工具）  →  分析层（AI 处理）  →  存储层（三层记忆）
    │                        │                       │
    ├─ 网页引擎(9)           ├─ 笔记自动生成        ├─ Hot(Memory)
-   ├─ 视频引擎(10)          ├─ 知识图谱提取        ├─ Warm(Hindsight)
+   ├─ 视频引擎(11)          ├─ 知识图谱提取        ├─ Warm(Hindsight)
    ├─ 文章/内容(10)         ├─ NLI 事实核查        └─ Cold(gbrain)
-   ├─ 文档/OCR(5)           └─ 多模态分析
+   ├─ 文档/OCR(6)           └─ 多模态分析
+   ├─ 安全审计(1)
    └─ 知识检索/分析(7)
                                             ┌─ OneDrive / Google Drive
                                             ├─ 阿里云盘 / 百度网盘
@@ -49,10 +50,14 @@
 | 模块 | 工具数量 | 核心工具 |
 |------|----------|----------|
 | **网页采集** | 9 | Scrapling(stealthy/dynamic/http) / Chrome DevTools / GStack Browser / Crawl4AI / knowledge_fetch_router / knowledge_site_crawler / web_extract / obscura_fetch_bridge / opensquilla_bridge |
-| **视频采集** | 10 | douyin_video_intake / social_video_intake / universal-video-analyzer / yt-dlp / Whisper ASR / EasyOCR / FFmpeg / Tesseract / YouTube Analytics / 抖音热榜 |
+| **视频采集** | 10 | douyin_video_intake / social_video_intake / universal-video-analyzer / yt-dlp / Whisper ASR / EasyOCR / **PaddleOCR** / FFmpeg / Tesseract / YouTube Analytics / 抖音热榜 |
 | **文章/内容** | 10 | 微信公众文章 / 微博 / 新闻聚合(多源) / tech-news / AI中文日报 / blogwatcher / GitHub Trending / 通用网络文档 / 多格式文档解析 |
-| **文档/OCR** | 5 | umi_ocr_bridge / doc_parse_router / Magic-PDF / MinerU / book_cache_manager(710+书) |
+| **文档/OCR** | 6 | umi_ocr_bridge / doc_parse_router / Magic-PDF / MinerU / book_cache_manager(710+书) / **PaddleOCR**(70k⭐高精度OCR) |
 | **知识分析** | 7 | web_search / web_extract / NLI 事实核查 / 评论摘要 / 新闻丰富 / 关键词提取 / 交叉验证 |
+| **SDD 开发** | 1 | **Spec-Kit**(Spec-Driven Development 7步工作流) / **Copilot-SDK**(GitHub Copilot Agent集成) |
+| **安全审计** | 1 | **trivy**(文件/镜像/仓库安全扫描) |
+
+> 2026-06-06 新增: PaddleOCR(v3.6.0, 70k⭐) 高精度OCR引擎; Trivy(v0.71.0, 24k⭐) 安全扫描器; Spec-Kit 规范驱动开发; Copilot-SDK(v1.0.0, 9.2k⭐) Agent SDK。详见 Hermes tool_manifest.yaml external_tools_2026_06_06 节。
 
 > 详细工具调用链路见 [采集管线](docs/collection-pipeline.md)。
 
