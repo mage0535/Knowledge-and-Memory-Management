@@ -171,6 +171,36 @@ print(r['source'], '-', len(r['results']), '条结果')
 
 ---
 
+## 更新日志
+
+### 2026-06-07
+
+- **知识增广模块**：AnySearch 垂直搜索集成，本地笔记优先+全网回落（fallback_threshold=0.6）
+- 新增 `src/knowledge_augmentation/` 目录（config.py / anysearch_client.py / augmented_search.py）
+
+### 2026-06-06
+
+- **方法论蒸馏管线**：cron 每日自动从 Horizon trending 知识蒸馏为方法论，写入 gbrain
+- **4 个外部工具集成**：
+  - PaddleOCR(v3.6.0, 70k⭐) — 高精度 OCR 引擎
+  - Trivy(v0.71.0, 24k⭐) — 文件/镜像/仓库安全扫描
+  - Spec-Kit — 规范驱动开发（SDD 7步工作流）
+  - Copilot-SDK(v1.0.0, 9.2k⭐) — GitHub Copilot Agent 集成
+- 全部注册到 tool_manifest.yaml external_tools_2026_06_06 节
+
+### 2026-06-05
+
+- **知识精炼管线**：book_cache_manager 缓存书籍后自动分析提取结构化知识
+- 书本缓存 7 天自动清理机制
+
+### 2026-06-04
+
+- 初始发布 — 知识采集、笔记 RAG、云盘同步全链路
+- 30+ 采集分析工具全景
+- rclone 12+ 云盘驱动统一接口
+
+---
+
 ## 许可证
 
 MIT License © 2026
