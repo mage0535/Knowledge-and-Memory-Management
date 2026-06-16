@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.tar.gz
+*.whl
+
+# Environment
+.env
+.env.local
+*.log
+
+# Book cache (too large for git)
+book_cache/
+*.pdf
+*.epub
+
+# Node
+node_modules/
+.npm/

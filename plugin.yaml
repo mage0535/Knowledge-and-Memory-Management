@@ -1,0 +1,21 @@
+# Plugin Manifest
+name: "Knowledge and Memory Management"
+version: "0.0.2"
+description: "知识采集、笔记/RAG管理、云盘同步插件"
+author: "Knowledge-Memory-Project"
+license: "MIT"
+
+depends_on:
+  - name: "memory-system"
+    optional: true
+    description: "需要记忆体系统（Hindsight + gbrain）获得完整的知识图谱和RAG能力"
+
+extends:
+  - "knowledge-collection"
+  - "notes-rag"
+  - "cloud-sync"
+
+hooks:
+  post-install: "scripts/verify_plugin.sh"
+  post-collect: "src.knowledge_collector.on_collect"
+  pre-sync: "src.cloud_sync.on_pre_sync"

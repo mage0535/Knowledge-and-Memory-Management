@@ -1,0 +1,6 @@
+requests
+markdownify
+beautifulsoup4
+lxml
+pyyaml
+rclone-python
