@@ -41,4 +41,8 @@ TOOL_INVENTORY = {
         "title": "采集编排与调度",
         "description": "多源并行采集、去重、避撞",
     },
+    "book_index": {
+        "title": "书籍关键词索引",
+        "description": "从 OneDrive book/ 构建 FTS5 关键词索引，对话中自动匹配推荐相关书籍（search / suggest / cache / analyze / cleanup）",
+    },
 }
