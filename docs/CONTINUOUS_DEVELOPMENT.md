@@ -356,8 +356,8 @@ The smoke passed locally in the current machine environment.
 
 The smoke passed on the server when run against:
 
-- installed plugin directory: `/root/.hermes/knowledge-plugin`
-- installed script directory: `/root/.hermes/scripts`
+- installed plugin directory: the server agent plugin directory
+- installed script directory: the server agent script directory
 - Hermes venv Python
 - temporary smoke `AGENT_HOME` to avoid polluting production note/state locations
 
