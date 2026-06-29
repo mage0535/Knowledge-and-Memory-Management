@@ -168,7 +168,7 @@ To meet the original planning direction more fully, the project still needs:
    The repository installer must become the actual source of truth for the KMM runtime used on the server.
 
 2. **Production cutover**
-   KMM-related scripts in `/root/.hermes/scripts` should be replaced, one by one, with versions deployed from this repository, with rollback notes and verification.
+   KMM-related scripts in the server agent script directory should be replaced, one by one, with versions deployed from this repository, with rollback notes and verification.
 
 3. **Stronger agent-agnostic cleanup**
    Keep `AGENT_HOME` as the primary contract and reduce host-specific assumptions in docs, defaults, and helper scripts.
@@ -231,7 +231,7 @@ To meet the original planning direction more fully, the project still needs:
 
 The next preferred implementation sequence is:
 
-1. audit the current KMM-related scripts under `/root/.hermes/scripts`
+1. audit the current KMM-related scripts under the server agent script directory
 2. map each one to:
    - already covered by repository
    - needs repository enhancement

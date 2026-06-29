@@ -12,6 +12,7 @@ import gbrain_compact
 import gbrain_link_orphans
 import gray_validation_suite
 import recall_shadow_compare
+import sensitive_scan
 import sensenova_dispatcher
 
 
@@ -70,7 +71,7 @@ def test_sensenova_dispatcher_reports_missing_script(monkeypatch):
 
 
 def test_install_script_deploys_remaining_ops_scripts():
-    content = (REPO / "install.sh").read_text(encoding="utf-8")
+    content = (REPO / "configs" / "managed_scripts.txt").read_text(encoding="utf-8")
     for name in ("gbrain_compact.py", "gbrain_link_orphans.py", "sensenova_dispatcher.py", "book_to_skill.py", "recall_shadow_compare.py", "gray_validation_suite.py"):
         assert name in content
 
@@ -111,3 +112,13 @@ def test_gray_validation_suite_reports_success(monkeypatch):
     ]
 
     assert all(item["status"] in {"ok", "skipped"} for item in results)
+
+
+def test_sensitive_scan_flags_private_paths(tmp_path: Path):
+    bad = tmp_path / "bad.md"
+    bad.write_text("/root/private/path\n", encoding="utf-8")
+
+    payload = sensitive_scan.scan_repo(tmp_path)
+
+    assert payload["ok"] is False
+    assert any(item["type"] == "server_absolute_path" for item in payload["findings"])

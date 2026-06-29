@@ -107,13 +107,15 @@ def test_book_cache_manager_can_rebuild_index(tmp_path: Path):
 
 def test_install_script_deploys_linux_runtime_scripts():
     content = (REPO / "install.sh").read_text(encoding="utf-8")
+    assert "configs/managed_scripts.txt" in content
+    manifest = (REPO / "configs" / "managed_scripts.txt").read_text(encoding="utf-8")
     for name in (
         "book_cache_manager.py",
         "doc_parse_router.py",
         "nightly_maintenance.py",
         "onedrive_bidirectional_sync.sh",
     ):
-        assert name in content
+        assert name in manifest
 
 
 def test_install_script_supports_noninteractive_and_skip_cron():
@@ -122,3 +124,10 @@ def test_install_script_supports_noninteractive_and_skip_cron():
     assert 'KMM_SKIP_CRON="${KMM_SKIP_CRON:-0}"' in content
     assert 'if [ "$KMM_NONINTERACTIVE" = "1" ] || [ ! -t 0 ]; then' in content
     assert 'if [ "$KMM_SKIP_CRON" = "1" ]; then' in content
+
+
+def test_managed_scripts_manifest_exists():
+    manifest = REPO / "configs" / "managed_scripts.txt"
+    content = manifest.read_text(encoding="utf-8")
+    assert "knowledge_discovery.py" in content
+    assert "verify_plugin.sh" in content

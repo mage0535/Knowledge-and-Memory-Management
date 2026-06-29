@@ -13,6 +13,7 @@ AGENT_HOME_OVERRIDE="${AGENT_HOME:-${HERMES_HOME:-}}"
 KMM_SYNC_REMOTE="${KMM_SYNC_REMOTE:-}"
 KMM_NONINTERACTIVE="${KMM_NONINTERACTIVE:-0}"
 KMM_SKIP_CRON="${KMM_SKIP_CRON:-0}"
+MANAGED_SCRIPTS_FILE="${PLUGIN_DIR}/configs/managed_scripts.txt"
 
 # 颜色
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -162,28 +163,12 @@ deploy_scripts() {
     info "部署公共脚本..."
     TARGET="${HERMES_HOME}/scripts"
     mkdir -p "$TARGET"
-    for script_name in \
-        book_cache_manager.py \
-        book_keyword_index.py \
-        book_to_skill.py \
-        doc_parse_router.py \
-        gbrain_compact.py \
-        gbrain_link_orphans.py \
-        gray_validation_suite.py \
-        knowledge_fetch_router.py \
-        knowledge_discovery.py \
-        lightweight_recall.py \
-        nightly_maintenance.py \
-        onedrive_bidirectional_sync.sh \
-        recall_shadow_compare.py \
-        sensenova_dispatcher.py \
-        verify_plugin.sh \
-        install_rclone_drives.sh \
-        distill_methodologies.py
-    do
+    while IFS= read -r script_name; do
+        [ -n "$script_name" ] || continue
         cp "$PLUGIN_DIR/scripts/${script_name}" "$TARGET/${script_name}"
         chmod +x "$TARGET/${script_name}" || true
-    done
+    done < "$MANAGED_SCRIPTS_FILE"
+    printf '%s\n' "commit=${KMM_RELEASE_COMMIT:-unknown}" "installed_at=$(date -Is)" > "${TARGET}/kmm-install-manifest.txt"
     ok "公共脚本部署到: $TARGET"
 }
 
