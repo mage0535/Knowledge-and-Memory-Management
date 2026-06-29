@@ -11,7 +11,12 @@ import sys
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-PLUGIN_DIR = Path(os.environ.get("KMM_PLUGIN_DIR", SCRIPT_DIR.parent / "src"))
+AGENT_HOME = Path(
+    os.environ.get("AGENT_HOME")
+    or os.environ.get("HERMES_HOME")
+    or (Path.home() / ".hermes")
+).expanduser()
+PLUGIN_DIR = Path(os.environ.get("KMM_PLUGIN_DIR", AGENT_HOME / "knowledge-plugin"))
 PYTHON_BIN = os.environ.get("KMM_PYTHON", sys.executable)
 DEFAULT_QUERIES = (
     "agent memory architecture",

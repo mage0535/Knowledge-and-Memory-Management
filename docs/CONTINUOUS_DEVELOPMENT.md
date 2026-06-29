@@ -239,3 +239,136 @@ The next preferred implementation sequence is:
 3. cut over covered scripts to repository-installed versions
 4. verify server behavior through gray validation
 5. only then continue feature expansion
+
+## 2026-06-29 Runtime Closure Follow-up
+
+### Additional work completed
+
+- Added repository-managed script inventory:
+  - `configs/managed_scripts.txt`
+- Added public release and rollout assets:
+  - `docs/RELEASE_CHECKLIST.md`
+  - `docs/GRAY_ROLLOUT.md`
+  - `docs/ROLLBACK.md`
+  - `docs/SERVER_SCRIPT_MAPPING.md`
+- Added CI workflow:
+  - `.github/workflows/ci.yml`
+- Added repository-sensitive scan:
+  - `scripts/sensitive_scan.py`
+- Updated installer to read managed scripts from a manifest file.
+- Updated installer to record a lightweight install manifest in the target scripts directory.
+- Updated uninstall behavior to clean up the managed KMM script set more consistently.
+- Fixed installed-script import resolution so runtime scripts prefer:
+  - `KMM_PLUGIN_DIR`
+  - `AGENT_HOME/knowledge-plugin`
+  - repository `src/`
+- Performed server-side repository-based KMM install into the server agent home directory.
+- Ran server-side validation successfully:
+  - `verify_plugin.sh`
+  - `gray_validation_suite.py`
+
+### Server validation result
+
+Repository-managed KMM scripts can now run from the installed server location under the current server environment.
+
+Observed successful validation points:
+
+- import smoke passed
+- knowledge discovery script executed
+- lightweight recall executed for multiple queries
+- sync dry-run was safely skipped because no explicit `KMM_SYNC_REMOTE` was set for the validation invocation
+- markitdown became available when installation was directed to the Hermes venv
+
+### Current status against the 1-6 roadmap
+
+1. **Repository-to-runtime closure**
+   Partially completed.
+   The installer and managed script inventory now exist, and server installation was validated.
+
+2. **Production cutover**
+   Partially completed.
+   Repository-managed KMM scripts were installed and validated on the server, but the server checkout still contains uncommitted local modifications because the latest local import-fix commit was applied outside the GitHub mainline sync path.
+
+3. **Stronger agent-agnostic cleanup**
+   Improved.
+   `AGENT_HOME`-first behavior is stronger across runtime scripts, installer docs, and validation helpers.
+
+4. **Public documentation tightening**
+   Improved.
+   Release, rollout, rollback, and mapping docs now exist, and public docs more closely reflect repository-backed behavior.
+
+5. **Operational validation**
+   Improved.
+   Sensitive scan, CI workflow, and gray validation support now exist.
+
+6. **Release engineering**
+   Improved.
+   The repository now includes explicit release and rollout assets.
+
+### Remaining unresolved items
+
+- GitHub `main` is still missing the most recent local import-resolution fix commit if network push remains unavailable.
+- The server repository working tree is currently dirty because those import-resolution files were copied into place for runtime validation.
+- KMM cron cutover was intentionally not changed in this round because the rollout used `KMM_SKIP_CRON=1` for a safer gray validation.
+- Some runtime outputs still surface historical session content that contains private server paths inside recall results; this is coming from existing memory/state data, not from the repository code itself.
+
+### Immediate next actions
+
+1. Push the remaining local fix commit to GitHub when outbound connectivity is available.
+2. Fast-forward the server repository checkout to that GitHub commit so the server repo returns to a clean state.
+3. Decide whether to let the repository installer take over KMM-managed cron entries in production.
+4. If cron cutover is approved, rerun install with:
+   - `KMM_SKIP_CRON=0`
+   - explicit `KMM_SYNC_REMOTE` if sync should be managed by KMM
+
+## 2026-06-30 Real Usage Verification
+
+### End-to-end smoke added
+
+- Added `scripts/kmm_e2e_smoke.py`
+
+This smoke exercises real KMM behavior rather than only unit-test mocks:
+
+- temporary local web collection via live HTTP server
+- article collection in URL mode and keyword mode
+- video capture note generation
+- document conversion and note generation
+- note generation API
+- note creation and search API
+- recent-note discovery
+- book cache index rebuild
+- book keyword index build and search
+- actual rclone local-remote sync:
+  - copy to remote
+  - copy from remote
+  - bisync
+- actual installed script execution:
+  - `knowledge_discovery.py`
+  - `lightweight_recall.py`
+  - `doc_parse_router.py`
+  - `book_to_skill.py`
+
+### Local real-usage result
+
+The smoke passed locally in the current machine environment.
+
+### Server real-usage result
+
+The smoke passed on the server when run against:
+
+- installed plugin directory: `/root/.hermes/knowledge-plugin`
+- installed script directory: `/root/.hermes/scripts`
+- Hermes venv Python
+- temporary smoke `AGENT_HOME` to avoid polluting production note/state locations
+
+### Practical conclusion
+
+For the repository-backed KMM public/runtime feature set, the core functions are now:
+
+- implemented
+- installed on the server
+- actually executed
+- verified with real outputs
+
+This does **not** mean every broader ecosystem item ever mentioned in historical docs is fully productized.
+It means the repository-backed KMM feature surface itself has now been real-use tested.

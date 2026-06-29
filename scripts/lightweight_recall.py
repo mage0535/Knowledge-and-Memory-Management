@@ -17,9 +17,14 @@ from urllib.request import Request, urlopen
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+AGENT_HOME = Path(
+    os.environ.get("AGENT_HOME")
+    or os.environ.get("HERMES_HOME")
+    or (Path.home() / ".hermes")
+).expanduser()
 PLUGIN_ROOT = Path(
     os.environ.get("KMM_PLUGIN_DIR")
-    or (Path(os.environ.get("AGENT_HOME", os.environ.get("HERMES_HOME", ""))) / "knowledge-plugin")
+    or (AGENT_HOME / "knowledge-plugin")
 ).expanduser()
 for candidate in (PLUGIN_ROOT, REPO_ROOT / "src"):
     if candidate.exists():

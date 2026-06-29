@@ -22,6 +22,22 @@ ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 err()   { echo -e "${RED}[ERR]${NC} $1"; exit 1; }
 
+resolve_python_installer() {
+    if [ -n "${KMM_PYTHON_BIN:-}" ] && [ -x "${KMM_PYTHON_BIN}" ]; then
+        echo "${KMM_PYTHON_BIN}"
+        return
+    fi
+    if [ -x "${HERMES_HOME}/hermes-agent/.venv/bin/python3" ]; then
+        echo "${HERMES_HOME}/hermes-agent/.venv/bin/python3"
+        return
+    fi
+    if [ -x "${HERMES_HOME}/.venv/bin/python3" ]; then
+        echo "${HERMES_HOME}/.venv/bin/python3"
+        return
+    fi
+    echo "python3"
+}
+
 # ---- 检测记忆体系统 ----
 detect_memory_system() {
     info "检测记忆体系统..."
@@ -139,17 +155,18 @@ deploy_python_modules() {
     info "部署 Python 模块..."
 
     TARGET="${HERMES_HOME}/knowledge-plugin"
+    INSTALL_PYTHON="$(resolve_python_installer)"
     mkdir -p "$TARGET"
 
     cp -r "$PLUGIN_DIR/src"/* "$TARGET/"
     
     # 安装依赖
     if [ -f "$PLUGIN_DIR/requirements.txt" ]; then
-        python3 -m pip install -r "$PLUGIN_DIR/requirements.txt" --quiet || \
+        "${INSTALL_PYTHON}" -m pip install -r "$PLUGIN_DIR/requirements.txt" --quiet || \
         warn "pip 安装部分依赖失败（可手动安装）"
     fi
 
-    if python3 -c "from markitdown import MarkItDown" >/dev/null 2>&1; then
+    if "${INSTALL_PYTHON}" -c "from markitdown import MarkItDown" >/dev/null 2>&1; then
         ok "markitdown 已可用"
     else
         warn "markitdown 不可用，文档采集能力将受限"
