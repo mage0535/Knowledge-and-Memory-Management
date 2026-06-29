@@ -61,8 +61,8 @@ KMM 知识采集管线依赖的工具链版本记录。
 ### Python 包
 
 ```bash
-# 进入 Hermes venv
-source ~/.hermes/hermes-agent/.venv/bin/activate
+# 进入你的 Python 环境
+export AGENT_HOME="${AGENT_HOME:-$HOME/.hermes}"
 
 # 升级单个包
 pip install --upgrade yt-dlp scrapling

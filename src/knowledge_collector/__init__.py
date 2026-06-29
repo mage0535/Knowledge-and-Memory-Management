@@ -5,7 +5,22 @@
 按采集源类型分模块组织。
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
+from .article import collect_article
+from .document import (
+    DocumentCollector,
+    DocumentConversionError,
+    DocumentConverter,
+    DocumentResult,
+    SUPPORTED_EXTENSIONS,
+    SUPPORTED_FORMATS,
+    collect_book,
+    collect_document,
+)
+from .note_generator import generate_note
+from .video import collect_video
+from .web import collect_web
 
 # 工具全集索引
 TOOL_INVENTORY = {
@@ -22,8 +37,8 @@ TOOL_INVENTORY = {
         "description": "从社交媒体、新闻、RSS 采集文章",
     },
     "document": {
-        "title": "文档/OCR 采集",
-        "description": "从 PDF、图片、扫描件中提取文字",
+        "title": "文档采集",
+        "description": "通过 MarkItDown 统一转换 PDF、Office、HTML、图片和结构化文本格式",
     },
     "analysis": {
         "title": "关键词分析与知识扩展",
@@ -41,8 +56,30 @@ TOOL_INVENTORY = {
         "title": "采集编排与调度",
         "description": "多源并行采集、去重、避撞",
     },
-    "book_index": {
-        "title": "书籍关键词索引",
-        "description": "从 OneDrive book/ 构建 FTS5 关键词索引，对话中自动匹配推荐相关书籍（search / suggest / cache / analyze / cleanup）",
-    },
 }
+
+
+def on_collect(payload: dict | None = None) -> dict:
+    """Manifest hook used after collection jobs complete."""
+    payload = dict(payload or {})
+    payload.setdefault("status", "ok")
+    payload.setdefault("module", "knowledge_collector")
+    return payload
+
+
+__all__ = [
+    "TOOL_INVENTORY",
+    "DocumentCollector",
+    "DocumentConversionError",
+    "DocumentConverter",
+    "DocumentResult",
+    "SUPPORTED_EXTENSIONS",
+    "SUPPORTED_FORMATS",
+    "collect_article",
+    "collect_book",
+    "collect_document",
+    "collect_video",
+    "collect_web",
+    "generate_note",
+    "on_collect",
+]

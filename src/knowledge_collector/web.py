@@ -4,6 +4,19 @@
 覆盖从轻量HTTP提取到反检测浏览器采集的全部场景。
 """
 
+from __future__ import annotations
+
+from dataclasses import asdict
+from html import unescape
+import re
+from urllib.parse import urlparse
+
+import requests
+from bs4 import BeautifulSoup
+
+from runtime_support import CollectionResult
+from .note_generator import generate_note
+
 class WebCollector:
     """网页知识采集 — 6 种采集引擎"""
 
@@ -165,4 +178,48 @@ class WebCollector:
             url: 目标 URL
             strategy: auto / simple_page / dynamic_page / anti_bot_page / batch_site
         """
-        pass
+        response = requests.get(url, timeout=20, headers={"User-Agent": "KMM/0.1.0"})
+        response.raise_for_status()
+        html = response.text
+        soup = BeautifulSoup(html, "html.parser")
+        title = ""
+        if soup.title and soup.title.string:
+            title = soup.title.string.strip()
+        text = self._extract_text(soup)
+        if not title:
+            title = urlparse(url).netloc or "web-note"
+        preview = text[:1000]
+        note = generate_note(
+            {
+                "title": title,
+                "content": text or preview or url,
+                "source_type": "web",
+                "source_ref": url,
+                "metadata": {"strategy": strategy, "extractor": "requests+bs4"},
+            },
+            template="web",
+        )
+        return CollectionResult(
+            source_type="web",
+            title=title,
+            content_preview=preview,
+            url=url,
+            note_path=note["note_path"],
+            gbrain_slug=note["note_id"],
+            extractor="requests+bs4",
+            metadata={"strategy": strategy},
+        )
+
+    @staticmethod
+    def _extract_text(soup: BeautifulSoup) -> str:
+        for tag in soup(["script", "style", "noscript"]):
+            tag.decompose()
+        text = soup.get_text("\n")
+        text = unescape(text)
+        lines = [line.strip() for line in text.splitlines()]
+        cleaned = "\n".join(line for line in lines if line)
+        return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def collect_web(url: str, strategy: str = "auto") -> CollectionResult:
+    return WebCollector().collect(url, strategy=strategy)

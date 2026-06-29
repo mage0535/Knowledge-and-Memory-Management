@@ -16,6 +16,8 @@ from typing import Any, Optional
 
 from .config import load_config, AugmentationConfig
 from .anysearch_client import AnySearchClient, AnySearchError
+from notes_rag import search_notes as search_kmm_notes
+from runtime_support import resolve_notes_root
 
 logger = logging.getLogger("kmm.augmentation.search")
 
@@ -56,6 +58,9 @@ class AugmentedSearch:
             "augmented": True/False,
           }
         """
+        if self.cfg.local_first is False and not local_only and not web_only:
+            return self._build_web_response(query, domain, domains)
+
         # ── 模式 A: 只搜本地 ──
         if web_only:
             return self._search_web(query, domain, domains)
@@ -93,6 +98,15 @@ class AugmentedSearch:
             logger.warning("list_domains 失败: %s", e)
             return []
 
+    def _build_web_response(self, query: str, domain: str, domains: Optional[list[str]]) -> dict:
+        return {
+            "query": query,
+            "source": "web",
+            "local_weight": 0.0,
+            "results": self._search_web(query, domain, domains),
+            "augmented": True,
+        }
+
     # ── 内部 ──────────────────────────────────────────────
 
     def _get_anysearch(self) -> AnySearchClient:
@@ -108,7 +122,19 @@ class AugmentedSearch:
         """搜本地笔记库 — 聚合 gbrain + notes_rag + Hindsight"""
         results = []
 
-        # 1) gbrain 语义搜索（Hermes 环境可用时）
+        # 1) notes_rag 统一搜索
+        for row in search_kmm_notes(query)[: self.cfg.max_local_results]:
+            results.append(
+                {
+                    "source": row.get("source", "local_note"),
+                    "title": row.get("title", ""),
+                    "content": row.get("content", "")[:300],
+                    "score": row.get("score", 0.5),
+                    "url": row.get("url", ""),
+                }
+            )
+
+        # 2) gbrain 语义搜索（Hermes 环境可用时）
         try:
             from gbrain_bridge import search_gbrain as _gbrain_search
             gbrain_results = _gbrain_search(query, limit=self.cfg.max_local_results)
@@ -123,10 +149,10 @@ class AugmentedSearch:
         except ImportError:
             pass  # gbrain 不可用时静默降级
 
-        # 2) 本地文件全文搜索
+        # 3) 本地文件全文搜索
         import subprocess
         try:
-            notes_dir = Path.home() / "knowledge" / "notes"
+            notes_dir = resolve_notes_root()
             if notes_dir.exists():
                 grep = subprocess.run(
                     ["rg", "-l", "-i", query, "--max-count", "3", "-g", "*.md", str(notes_dir)],
@@ -170,7 +196,7 @@ class AugmentedSearch:
 
         try:
             # 多域搜索
-            target_domains = domains or ([domain] if domain else [""])
+            target_domains = domains or ([self._map_domain(domain)] if domain else [""])
 
             for d in target_domains:
                 raw = client.search(
@@ -202,3 +228,8 @@ class AugmentedSearch:
             logger.warning("AnySearch web 搜索失败: %s", e)
 
         return results[:self.cfg.max_web_results]
+
+    def _map_domain(self, domain: str) -> str:
+        if not domain:
+            return ""
+        return self.cfg.domain_mapping.get(domain, domain)

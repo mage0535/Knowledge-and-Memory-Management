@@ -26,7 +26,7 @@ Collection Layer (40+ tools)  →  Analysis Layer (AI)  →  Storage Layer (3-ti
    ├─ Web engines (9)             ├─ Auto note generation  ├─ Hot (Memory tool)
    ├─ Video engines (12)          ├─ Knowledge graph       ├─ Warm (Hindsight, 10K nodes)
    ├─ Articles/Content (10)       ├─ NLI fact checking     └─ Cold (gbrain, 11K pages)
-   ├─ Documents/OCR (9)           ├─ Knowledge discovery
+   ├─ Documents/OCR (10)          ├─ Knowledge discovery
    ├─ Knowledge analysis (7)      └─ Book auto-refinement
    └─ Knowledge management (4)
                                              ┌─ OneDrive / Google Drive
@@ -45,7 +45,7 @@ Collection Layer (40+ tools)  →  Analysis Layer (AI)  →  Storage Layer (3-ti
 | **Knowledge Collector** | `src/knowledge_collector/` | 9 sub-modules covering web/video/articles/documents/analysis/note generation/refinement/knowledge management |
 | **Notes RAG** | `src/notes_rag/` | Semantic search, vector retrieval, 3-tier context recall |
 | **Cloud Sync** | `src/cloud_sync/` | rclone unified driver, 12+ cloud storage bidirectional sync |
-| **SenseNova Engine** | `src/sensenova/` | PDF/PPT/Word intelligent document analysis |
+| **Document Collection** | `src/knowledge_collector/document.py` | Public document conversion with MarkItDown plus KMM wrappers |
 | **Knowledge Augmentation** | `src/knowledge_augmentation/` | Local-first + AnySearch web fallback |
 | **Pipeline Docs** | `docs/collection-pipeline.md` | **40+ tools** with detailed descriptions and pipeline diagrams |
 | **Tool Versions** | `docs/tool-versions.md` | Verified toolchain version table |
@@ -86,10 +86,11 @@ Collection Layer (40+ tools)  →  Analysis Layer (AI)  →  Storage Layer (3-ti
 | **Tesseract OCR** | CLI | ⭐⭐⭐ | Open-source OCR (Chinese support) |
 | **YouTube Analytics** | Skill | ⭐⭐⭐⭐ | Channel/video data analysis |
 
-### 📄 Documents/OCR (9 tools) — with SenseNova
+### 📄 Documents/OCR (10 tools) — MarkItDown + SenseNova-compatible flow
 
 | Tool | Rating | Description |
 |------|--------|-------------|
+| **MarkItDown** | ⭐⭐⭐⭐⭐ | Unified conversion for PDF / Office / HTML / CSV / JSON / XML / images / mail |
 | **SenseNova PDF Analysis** | ⭐⭐⭐⭐⭐ | Text+scan PDFs, tables/charts/multi-page extraction |
 | **SenseNova PPT Analysis** | ⭐⭐⭐⭐⭐ | Full slide text/tables/charts/embedded images |
 | **SenseNova Word Analysis** | ⭐⭐⭐⭐⭐ | Body/tables/highlights/formatting/multi-document comparison |
@@ -118,8 +119,8 @@ web_search / web_extract / NLI fact checking / comment summarization / news enri
 ## Quick Install
 
 ```bash
-# Prerequisite: hermes-memory-installer (gbrain + Hindsight) already installed
-source ~/.hermes/hermes-agent/.venv/bin/activate
+# Optional: point to an existing sidecar-compatible agent home
+export AGENT_HOME="${AGENT_HOME:-$HOME/.hermes}"
 
 # Clone the repo
 git clone https://github.com/mage0535/Knowledge-and-Memory-Management.git
@@ -130,7 +131,7 @@ bash install.sh
 ```
 
 The installer automatically:
-1. Detects Hermes environment (venv, gbrain port 8787, Hindsight port 8890)
+1. Detects the agent environment (`AGENT_HOME` / `HERMES_HOME`, gbrain, Hindsight)
 2. Installs/upgrades Python dependencies (yt-dlp, scrapling, paddleocr, etc.)
 3. Detects system tools (ffmpeg, tesseract, rclone)
 4. Configures cloud drive bidirectional sync rules
@@ -144,7 +145,11 @@ The installer automatically:
 ### Document Analysis
 
 ```bash
-# SenseNova PDF — supports text & scanned PDFs
+# MarkItDown document collection (recommended)
+python3 -m knowledge_collector.document report.pdf
+python3 -m knowledge_collector.document --batch ./docs/ --progress
+
+# SenseNova PDF — if the host provides the dispatcher scripts
 python3 sensenova_dispatcher.py pdf report.pdf
 
 # SenseNova PPT — full slide extraction
@@ -247,10 +252,10 @@ User search → search_notes("BYD 2026Q1 earnings")
 
 ## Changelog
 
-### v0.0.2 (2026-06-16)
+### v0.1.0 (2026-06-29)
 
-- **Collection pipeline v2.0**: Tools expanded from 30+ to **40+**
-- **SenseNova document engine**: PDF/PPT/Word intelligent analysis
+- Unified public baseline across local, GitHub, and server checkout
+- Public MarkItDown-based document collection added to the repository runtime
 - **Knowledge management module**: Auto-discovery + 3-tier recall + bidirectional cloud sync
 - **Video collection expanded**: douyin_batch_transcriber + media_transcriber_wrapper
 - **10 cron compact system**: 34→10, night maintenance orchestrates all maintenance

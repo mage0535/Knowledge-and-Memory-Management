@@ -4,6 +4,13 @@
 从抖音、YouTube、社交平台及通用视频源中提取画面和声音内容。
 """
 
+from __future__ import annotations
+
+from urllib.parse import parse_qs, urlparse
+
+from runtime_support import CollectionResult
+from .note_generator import generate_note
+
 class VideoCollector:
     """视频知识采集 — 8 种引擎/工具"""
 
@@ -153,3 +160,42 @@ class VideoCollector:
             "status": "已部署",
         },
     }
+
+    def collect(self, url: str) -> CollectionResult:
+        parsed = urlparse(url)
+        host = parsed.netloc or "video"
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+        if not video_id and parsed.path:
+            video_id = parsed.path.strip("/").split("/")[-1]
+        title = f"Video capture from {host}"
+        body = (
+            f"URL: {url}\n"
+            f"Video ID: {video_id or 'unknown'}\n\n"
+            "Public KMM stores a structured capture note for this video URL. "
+            "Server-side OCR/ASR pipelines can enrich this note later."
+        )
+        note = generate_note(
+            {
+                "title": title,
+                "content": body,
+                "source_type": "video",
+                "source_ref": url,
+                "metadata": {"host": host, "video_id": video_id},
+            },
+            template="video",
+        )
+        return CollectionResult(
+            source_type="video",
+            title=title,
+            content_preview=body[:500],
+            url=url,
+            note_path=note["note_path"],
+            gbrain_slug=note["note_id"],
+            metadata={"host": host, "video_id": video_id},
+            subtitles=[],
+            frames=[],
+        )
+
+
+def collect_video(url: str) -> CollectionResult:
+    return VideoCollector().collect(url)

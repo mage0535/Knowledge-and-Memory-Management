@@ -4,6 +4,12 @@
 覆盖微信、微博、新闻、RSS/博客等内容源的采集。
 """
 
+from __future__ import annotations
+
+from runtime_support import CollectionResult
+from .note_generator import generate_note
+from .web import collect_web
+
 class ArticleCollector:
     """文章内容采集 — 12 种采集源"""
 
@@ -163,3 +169,40 @@ class ArticleCollector:
             "status": "已部署",
         },
     }
+
+    def collect(self, source: str, keyword: str) -> CollectionResult:
+        if keyword.startswith("http://") or keyword.startswith("https://"):
+            result = collect_web(keyword, strategy="auto")
+            result.source_type = "article"
+            result.metadata["source"] = source
+            return result
+
+        title = f"{source}: {keyword}"
+        body = (
+            f"Source: {source}\n"
+            f"Keyword: {keyword}\n\n"
+            "This public KMM package stores the article collection request as a structured note. "
+            "Use server-side source adapters for provider-specific ingestion."
+        )
+        note = generate_note(
+            {
+                "title": title,
+                "content": body,
+                "source_type": "article",
+                "source_ref": keyword,
+                "metadata": {"source": source},
+            },
+            template="article",
+        )
+        return CollectionResult(
+            source_type="article",
+            title=title,
+            content_preview=body[:500],
+            note_path=note["note_path"],
+            gbrain_slug=note["note_id"],
+            metadata={"source": source},
+        )
+
+
+def collect_article(source: str, keyword: str) -> CollectionResult:
+    return ArticleCollector().collect(source, keyword)

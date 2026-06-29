@@ -2,7 +2,7 @@
 
 ## 前提
 
-已安装记忆体系统（[Hermes Memory Installer](https://github.com/mage0535/hermes-memory-installer) v3.0+）。
+已安装记忆体系统（[Hermes Memory Installer](https://github.com/mage0535/hermes-memory-installer) v3.0+）时效果最佳；未安装时也可使用公开采集与笔记能力。
 
 ## 安装
 
@@ -10,6 +10,7 @@
 git clone https://github.com/mage0535/Knowledge-and-Memory-Management.git
 cd Knowledge-and-Memory-Management
 chmod +x install.sh
+export AGENT_HOME="${AGENT_HOME:-$HOME/.hermes}"
 ./install.sh
 ```
 
@@ -44,7 +45,7 @@ rclone config
 
 ```bash
 # 手动同步
-rclone copy ~/.hermes/knowledge/notes/ onedrive:知识库/笔记/ --progress
+rclone copy "${AGENT_HOME:-$HOME/.hermes}/knowledge/notes/" onedrive:知识库/笔记/ --progress
 
 # 查看自动同步状态
 crontab -l | grep knowledge-sync

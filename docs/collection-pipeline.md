@@ -2,10 +2,10 @@
 
 ## 总览
 
-本插件集成了 Hermes Agent 环境中 **40+ 采集和分析工具**，按源类型分为 9 大模块。
+本插件集成了 KMM 公开运行时中的 **40+ 采集和分析工具**，按源类型分为 9 大模块。
 
 **最新更新 (2026-06-16)：**
-- 新增 SenseNova 文档分析引擎（PDF/PPT/Word 三件套）
+- 新增 MarkItDown 统一文档采集能力
 - 新增批量视频转录（douyin_batch_transcriber + media_transcriber_wrapper）
 - 新增知识管理工具（自动发现 + 三层召回 + 双向云同步）
 - book_to_skill 自动触发管线集成
@@ -65,19 +65,27 @@
 | 9 | **GitHub 热门** | github_trending_collector.py | ⭐⭐⭐ |
 | 10 | **通用网络文档** | network_doc_intake.py | ⭐⭐⭐⭐ |
 
-## 4. 文档/OCR（9 种）
+## 4. 文档/OCR（10 种）
 
 | # | 工具 | 能力等级 | 说明 |
 |---|------|----------|------|
-| 1 | **SenseNova PDF分析** | ⭐⭐⭐⭐⭐ | 文字型/扫描型 PDF 全量提取，表格+图表+多页 |
-| 2 | **SenseNova PPT分析** | ⭐⭐⭐⭐⭐ | 全Slide文本/表格/图表/嵌入图片提取 |
-| 3 | **SenseNova Word分析** | ⭐⭐⭐⭐⭐ | 正文/表格/高亮/格式/多文档对比 |
-| 4 | **umi_ocr_bridge** | ⭐⭐⭐⭐ | 中文OCR增强桥接 |
-| 5 | **doc_parse_router** | ⭐⭐⭐⭐ | 多格式文档解析路由（PDF/HTML/MD/Office） |
-| 6 | **Magic-PDF** | ⭐⭐⭐⭐ | PDF 转 Markdown |
-| 7 | **MinerU** | ⭐⭐⭐⭐ | 文档内容提取 |
-| 8 | **PaddleOCR** | ⭐⭐⭐⭐ | 百度开源OCR引擎（中英文+表格识别） |
-| 9 | **book_cache_manager** | ⭐⭐⭐⭐ | 710+本书索引+按需缓存分析+自动精炼触发 |
+| 1 | **MarkItDown** | ⭐⭐⭐⭐⭐ | 公开仓库内置统一文档转换：PDF / Office / HTML / CSV / JSON / XML / 图片 / 邮件 |
+| 2 | **SenseNova PDF分析** | ⭐⭐⭐⭐⭐ | 文字型/扫描型 PDF 全量提取，表格+图表+多页 |
+| 3 | **SenseNova PPT分析** | ⭐⭐⭐⭐⭐ | 全Slide文本/表格/图表/嵌入图片提取 |
+| 4 | **SenseNova Word分析** | ⭐⭐⭐⭐⭐ | 正文/表格/高亮/格式/多文档对比 |
+| 5 | **umi_ocr_bridge** | ⭐⭐⭐⭐ | 中文OCR增强桥接 |
+| 6 | **doc_parse_router** | ⭐⭐⭐⭐ | 多格式文档解析路由（PDF/HTML/MD/Office） |
+| 7 | **Magic-PDF** | ⭐⭐⭐⭐ | PDF 转 Markdown |
+| 8 | **MinerU** | ⭐⭐⭐⭐ | 文档内容提取 |
+| 9 | **PaddleOCR** | ⭐⭐⭐⭐ | 百度开源OCR引擎（中英文+表格识别） |
+| 10 | **book_cache_manager** | ⭐⭐⭐⭐ | 710+本书索引+按需缓存分析+自动精炼触发 |
+
+**公开仓库内置文档采集：**
+
+```bash
+python3 -m knowledge_collector.document report.pdf
+python3 -m knowledge_collector.document --batch ./docs/ --progress
+```
 
 **SenseNova 文档引擎使用：**
 

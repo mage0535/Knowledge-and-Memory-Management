@@ -4,6 +4,12 @@
 从原始材料到结构化笔记、到知识图谱入库、到云盘同步的全流程。
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
+from runtime_support import ensure_directory, render_note_markdown, resolve_notes_root, stable_note_id
+
 class NoteGenerator:
     """笔记生成 — 采集→笔记→入库→同步 全链路"""
 
@@ -28,8 +34,8 @@ class NoteGenerator:
         "step3_note_storage": {
             "title": "写入本地笔记目录",
             "description": "按目录协议写入结构化 Markdown 笔记",
-            "directory": "~/.hermes/knowledge/notes/",
-            "structure": "其他笔记/[笔记名]/[笔记名].md",
+            "directory": "$AGENT_HOME/knowledge/notes/",
+            "structure": "<domain>/<note-id>/<note-id>.md",
             "template": "标准 YAML frontmatter + Markdown 正文",
         },
         "step4_knowledge_graph": {
@@ -69,4 +75,36 @@ class NoteGenerator:
         3. gbrain 创建知识图谱节点
         4. 触发云盘同步
         """
-        pass
+        payload = dict(material or {})
+        title = note_title or payload.get("title") or f"{source_type}-note"
+        content = payload.get("content") or payload.get("material") or payload.get("text") or ""
+        if not content.strip():
+            raise ValueError("material content is required")
+        domain = payload.get("domain") or "personal"
+        source_ref = payload.get("source_ref") or payload.get("url") or ""
+        metadata = payload.get("metadata") or {}
+        note_id = stable_note_id(title, content)
+        note_dir = ensure_directory(resolve_notes_root() / domain / note_id)
+        note_path = note_dir / f"{note_id}.md"
+        note_path.write_text(
+            render_note_markdown(
+                title=title,
+                content=content,
+                domain=domain,
+                source_type=source_type,
+                source_ref=source_ref,
+                tags=payload.get("tags") or (),
+                metadata=metadata,
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "note_id": note_id,
+            "note_path": str(note_path),
+            "domain": domain,
+            "title": title,
+        }
+
+
+def generate_note(material, template="article", note_title=None):
+    return NoteGenerator().generate(material, source_type=template, note_title=note_title)

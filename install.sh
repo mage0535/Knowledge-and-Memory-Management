@@ -6,9 +6,13 @@ set -euo pipefail
 # 为已安装记忆体系统的 AI Agent 添加知识采集和云盘同步能力
 # ============================================================
 
-VERSION="0.0.2"
+VERSION="0.1.0"
 PLUGIN_NAME="Knowledge and Memory Management"
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+AGENT_HOME_OVERRIDE="${AGENT_HOME:-${HERMES_HOME:-}}"
+KMM_SYNC_REMOTE="${KMM_SYNC_REMOTE:-}"
+KMM_NONINTERACTIVE="${KMM_NONINTERACTIVE:-0}"
+KMM_SKIP_CRON="${KMM_SKIP_CRON:-0}"
 
 # 颜色
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -23,7 +27,7 @@ detect_memory_system() {
     MEMORY_INSTALLED=false
 
     # 检测 gbrain
-    if command -v gbrain &>/dev/null || curl -sf http://localhost:8787/api/stats &>/dev/null; then
+    if command -v gbrain &>/dev/null || curl -sf http://localhost:8787/health &>/dev/null; then
         ok "gbrain 检测到 (端口 8787)"
         GRAIN_OK=true
     else
@@ -41,7 +45,11 @@ detect_memory_system() {
     fi
 
     # 检测 Hermes Agent 目录
-    if [ -d "$HOME/.hermes" ]; then
+    if [ -n "$AGENT_HOME_OVERRIDE" ]; then
+        HERMES_HOME="$AGENT_HOME_OVERRIDE"
+        ok "Agent 目录使用环境变量: $HERMES_HOME"
+        MEMORY_INSTALLED=true
+    elif [ -d "$HOME/.hermes" ]; then
         ok "Hermes Agent 目录检测到 ($HOME/.hermes)"
         HERMES_HOME="$HOME/.hermes"
         MEMORY_INSTALLED=true
@@ -67,7 +75,8 @@ detect_deps() {
     
     # Python
     if command -v python3 &>/dev/null; then
-        ok "Python $(python3 --version | cut -d' ' -f2)"
+        PY_VER="$(python3 --version | cut -d' ' -f2)"
+        ok "Python ${PY_VER}"
     else
         err "需要 Python 3.9+"
     fi
@@ -131,21 +140,62 @@ deploy_python_modules() {
     TARGET="${HERMES_HOME}/knowledge-plugin"
     mkdir -p "$TARGET"
 
-    cp -r "$PLUGIN_DIR/src"/* "$TARGET/" 2>/dev/null || true
+    cp -r "$PLUGIN_DIR/src"/* "$TARGET/"
     
     # 安装依赖
     if [ -f "$PLUGIN_DIR/requirements.txt" ]; then
-        pip3 install -r "$PLUGIN_DIR/requirements.txt" --quiet 2>/dev/null || \
+        python3 -m pip install -r "$PLUGIN_DIR/requirements.txt" --quiet || \
         warn "pip 安装部分依赖失败（可手动安装）"
     fi
 
+    if python3 -c "from markitdown import MarkItDown" >/dev/null 2>&1; then
+        ok "markitdown 已可用"
+    else
+        warn "markitdown 不可用，文档采集能力将受限"
+    fi
+
     ok "Python 模块部署到: $TARGET"
+}
+
+# ---- 部署公共脚本 ----
+deploy_scripts() {
+    info "部署公共脚本..."
+    TARGET="${HERMES_HOME}/scripts"
+    mkdir -p "$TARGET"
+    for script_name in \
+        book_cache_manager.py \
+        book_keyword_index.py \
+        book_to_skill.py \
+        doc_parse_router.py \
+        gbrain_compact.py \
+        gbrain_link_orphans.py \
+        gray_validation_suite.py \
+        knowledge_fetch_router.py \
+        knowledge_discovery.py \
+        lightweight_recall.py \
+        nightly_maintenance.py \
+        onedrive_bidirectional_sync.sh \
+        recall_shadow_compare.py \
+        sensenova_dispatcher.py \
+        verify_plugin.sh \
+        install_rclone_drives.sh \
+        distill_methodologies.py
+    do
+        cp "$PLUGIN_DIR/scripts/${script_name}" "$TARGET/${script_name}"
+        chmod +x "$TARGET/${script_name}" || true
+    done
+    ok "公共脚本部署到: $TARGET"
 }
 
 # ---- 配置云同步 ----
 configure_cloud_sync() {
     if [ "$RCLONE_OK" = false ]; then
         warn "跳过云同步配置（需要先安装 rclone）"
+        return
+    fi
+
+    if [ "$KMM_NONINTERACTIVE" = "1" ] || [ ! -t 0 ]; then
+        warn "非交互模式，跳过云盘配置"
         return
     fi
 
@@ -182,13 +232,30 @@ deploy_config() {
 
 # ---- 设置定时任务 ----
 setup_cron() {
-    info "设置定时同步任务..."
+    info "设置 Linux 定时任务..."
 
-    CRON_CMD="*/30 * * * * cd ${HERMES_HOME} && rclone copy ${HERMES_HOME}/knowledge/notes/ onedrive:知识库/笔记/ --ignore-existing --quiet 2>/dev/null || true"
-    
-    (crontab -l 2>/dev/null | grep -v "knowledge-sync" || true; echo "$CRON_CMD # knowledge-sync") | crontab -
-    
-    ok "定时同步已注册（每30分钟）"
+    if [ "$KMM_SKIP_CRON" = "1" ]; then
+        warn "KMM_SKIP_CRON=1，跳过定时任务配置"
+        return
+    fi
+
+    if ! command -v crontab >/dev/null 2>&1; then
+        warn "crontab 不可用，跳过定时任务配置"
+        return
+    fi
+
+    CRON_LINES="$(crontab -l 2>/dev/null | grep -v 'knowledge-sync' | grep -v 'knowledge-discovery' | grep -v 'kmm-nightly' || true)"
+
+    if [ -n "$KMM_SYNC_REMOTE" ] && rclone listremotes 2>/dev/null | grep -q "^${KMM_SYNC_REMOTE%%:*}:"; then
+        CRON_LINES="${CRON_LINES}"$'\n'"*/30 * * * * KMM_SYNC_REMOTE=${KMM_SYNC_REMOTE} bash ${HERMES_HOME}/scripts/onedrive_bidirectional_sync.sh # knowledge-sync"
+    else
+        warn "未配置有效的 KMM_SYNC_REMOTE，跳过双向同步 cron"
+    fi
+
+    CRON_LINES="${CRON_LINES}"$'\n'"0 2 * * * python3 ${HERMES_HOME}/scripts/nightly_maintenance.py # kmm-nightly"
+    CRON_LINES="${CRON_LINES}"$'\n'"0 4 * * 0 python3 ${HERMES_HOME}/scripts/knowledge_discovery.py # knowledge-discovery"
+    printf '%s\n' "$CRON_LINES" | sed '/^$/d' | crontab -
+    ok "Linux 定时任务已更新"
 }
 
 # ---- 输出摘要 ----
@@ -211,7 +278,7 @@ print_summary() {
     echo "    cat ${PLUGIN_DIR}/docs/cloud-sync.md"
     echo ""
     echo "  🔧 验证安装:"
-    echo "    ${PLUGIN_DIR}/scripts/verify_plugin.sh"
+    echo "    ${HERMES_HOME}/scripts/verify_plugin.sh"
     echo ""
 }
 
@@ -227,6 +294,7 @@ main() {
     echo ""
     deploy_dirs
     deploy_python_modules
+    deploy_scripts
     deploy_config
     echo ""
     configure_cloud_sync

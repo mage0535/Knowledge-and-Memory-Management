@@ -5,9 +5,13 @@ Cloud Sync Engine — 云盘同步引擎
 支持 12+ 云盘：OneDrive / Google Drive / 阿里云盘 / 百度云盘 / 坚果云 / Dropbox / Mega / 天翼云 / iCloud / Nextcloud / 115 / 夸克
 """
 
+from __future__ import annotations
+
 import subprocess
 import os
 from pathlib import Path
+
+from runtime_support import resolve_notes_root
 
 DRIVERS = {
     "onedrive": {"type": "onedrive", "auth": "oauth", "setup": "rclone config"},
@@ -39,24 +43,91 @@ class CloudSyncEngine:
         """列出已配置的云盘"""
         result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
         return [r.strip().rstrip(":") for r in result.stdout.splitlines() if r.strip()]
+
+    def has_remote(self, remote: str) -> bool:
+        return remote.rstrip(":") in self.list_remotes()
+
+    @staticmethod
+    def _remote_target(remote: str, remote_path: str = "") -> str:
+        remote = remote.rstrip(":")
+        if remote_path:
+            return f"{remote}:{remote_path}"
+        return f"{remote}:"
+
+    def _run(self, cmd: list[str]):
+        return subprocess.run(cmd, capture_output=True, text=True)
     
     def sync_to(self, local_path, remote, remote_path, flags=None):
         """同步本地目录到云盘"""
-        cmd = ["rclone", "copy", local_path, f"{remote}:{remote_path}", "--progress"]
+        cmd = ["rclone", "copy", local_path, self._remote_target(remote, remote_path), "--progress"]
         if flags:
             cmd.extend(flags)
-        return subprocess.run(cmd)
+        return self._run(cmd)
     
     def sync_from(self, remote, remote_path, local_path):
         """从云盘同步到本地"""
-        cmd = ["rclone", "copy", f"{remote}:{remote_path}", local_path, "--progress"]
-        return subprocess.run(cmd)
+        cmd = ["rclone", "copy", self._remote_target(remote, remote_path), local_path, "--progress"]
+        return self._run(cmd)
+
+    def bisync(self, local_path: str, remote: str, remote_path: str = "", *, resync: bool = False, flags=None):
+        """双向同步，默认不执行 destructive resync。"""
+        cmd = ["rclone", "bisync", local_path, self._remote_target(remote, remote_path)]
+        if resync:
+            cmd.append("--resync")
+        if flags:
+            cmd.extend(flags)
+        return self._run(cmd)
     
-    def bidirectional_sync(self, local_path, remote_path):
-        """双向同步"""
-        cmd = ["rclone", "bisync", local_path, remote_path, "--resync"]
-        return subprocess.run(cmd)
+    def bidirectional_sync(self, local_path, remote_path, resync=False):
+        """兼容旧接口。remote_path 需使用 remote:path 形式。"""
+        remote_name, _, nested_path = remote_path.partition(":")
+        if not remote_name:
+            raise ValueError("remote_path must be formatted like 'remote:path'")
+        return self.bisync(local_path, remote_name, nested_path, resync=resync)
     
     def available_drivers(self):
         """返回当前已配置的云盘驱动列表"""
         return self.list_remotes()
+
+
+def list_cloud_drives():
+    return CloudSyncEngine().list_remotes()
+
+
+def sync_to_cloud(local: str, remote: str):
+    remote_name, _, remote_path = remote.partition(":")
+    if not remote_name:
+        raise ValueError("remote must be formatted like 'remote:path'")
+    return CloudSyncEngine().sync_to(local, remote_name, remote_path)
+
+
+def sync_from_cloud(remote: str, local: str):
+    remote_name, _, remote_path = remote.partition(":")
+    if not remote_name:
+        raise ValueError("remote must be formatted like 'remote:path'")
+    return CloudSyncEngine().sync_from(remote_name, remote_path, local)
+
+
+def bidirectional_sync(remote: str, local: str | None = None, *, resync: bool = False, flags=None):
+    remote_name, _, remote_path = remote.partition(":")
+    if not remote_name:
+        raise ValueError("remote must be formatted like 'remote:path'")
+    local_path = local or str(resolve_notes_root())
+    return CloudSyncEngine().bisync(local_path, remote_name, remote_path, resync=resync, flags=flags)
+
+
+def on_pre_sync(payload: dict | None = None) -> dict:
+    payload = dict(payload or {})
+    payload.setdefault("status", "ready")
+    payload.setdefault("notes_root", str(resolve_notes_root()))
+    return payload
+
+
+__all__ = [
+    "CloudSyncEngine",
+    "DRIVERS",
+    "list_cloud_drives",
+    "sync_from_cloud",
+    "sync_to_cloud",
+    "on_pre_sync",
+]

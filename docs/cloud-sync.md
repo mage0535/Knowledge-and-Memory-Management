@@ -122,7 +122,7 @@ rclone mount remote: /mnt/cloud/remote --daemon
 安装脚本已注册 crontab，每 30 分钟同步一次：
 
 ```bash
-*/30 * * * * rclone copy ~/.hermes/knowledge/notes/ onedrive:知识库/笔记/ --ignore-existing --quiet
+*/30 * * * * rclone copy ${AGENT_HOME:-$HOME/.hermes}/knowledge/notes/ onedrive:知识库/笔记/ --ignore-existing --quiet
 ```
 
 可自行调整：

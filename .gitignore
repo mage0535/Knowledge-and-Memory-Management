@@ -2,12 +2,12 @@
 __pycache__/
 *.pyc
 *.pyo
-.venv/
-venv/
-*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.venv/
+venv/
+*.egg-info/
 *.egg
 
 # IDE
@@ -22,17 +22,24 @@ venv/
 Thumbs.db
 
 # Build
-dist/
 build/
+dist/
 *.tar.gz
 *.whl
 
 # Environment
 .env
-.env.local
+.env.*
 *.log
 
-# Book cache (too large for git)
+# Data
+*.db
+*.sqlite
+*.sqlite3
+logs/
+data/
+tmp/
+archives/
 book_cache/
 *.pdf
 *.epub

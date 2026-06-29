@@ -17,9 +17,10 @@
 """
 import json, os, sys, datetime, glob, time
 
-HORIZON_PATH = os.path.expanduser("~/.hermes/skills/external/Horizon/data/mcp-runs")
-CACHE_FILE = os.path.expanduser("~/.hermes/data/methodology_cache.json")
-SUMMARY_FILE = os.path.expanduser("~/.hermes/data/methodology_daily.md")
+AGENT_HOME = os.path.expanduser(os.environ.get("AGENT_HOME", os.environ.get("HERMES_HOME", "~/.hermes")))
+HORIZON_PATH = os.path.join(AGENT_HOME, "skills", "external", "Horizon", "data", "mcp-runs")
+CACHE_FILE = os.path.join(AGENT_HOME, "data", "methodology_cache.json")
+SUMMARY_FILE = os.path.join(AGENT_HOME, "data", "methodology_daily.md")
 
 def get_latest_run():
     """获取 Horizon 最新 run 的 artifact 路径"""

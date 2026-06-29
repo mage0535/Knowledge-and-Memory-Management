@@ -1,6 +1,6 @@
 # Plugin Manifest
 name: "Knowledge and Memory Management"
-version: "0.0.2"
+version: "0.1.0"
 description: "知识采集、笔记/RAG管理、云盘同步插件"
 author: "Knowledge-Memory-Project"
 license: "MIT"
@@ -17,5 +17,5 @@ extends:
 
 hooks:
   post-install: "scripts/verify_plugin.sh"
-  post-collect: "src.knowledge_collector.on_collect"
-  pre-sync: "src.cloud_sync.on_pre_sync"
+  post-collect: "knowledge_collector.on_collect"
+  pre-sync: "cloud_sync.on_pre_sync"

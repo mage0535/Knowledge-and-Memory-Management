@@ -14,12 +14,25 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-BOOK_TO_SKILL = "$AGENT_HOME/scripts/book_to_skill.py"
 HERMES_SKILLS = Path(os.environ.get("HERMES_SKILLS_DIR",
     os.path.expanduser("~/.hermes/skills")))
 KMM_NOTES = Path(os.environ.get("KMM_NOTES_DIR",
     os.path.expanduser("~/knowledge/structured")))
+
+
+def resolve_book_to_skill() -> Path:
+    explicit = os.environ.get("BOOK_TO_SKILL")
+    if explicit:
+        return Path(explicit).expanduser()
+    agent_home = Path(
+        os.environ.get("AGENT_HOME")
+        or os.environ.get("HERMES_HOME")
+        or os.path.expanduser("~/.hermes")
+    )
+    agent_candidate = agent_home / "scripts" / "book_to_skill.py"
+    if agent_candidate.exists():
+        return agent_candidate
+    return Path(__file__).resolve().parents[2] / "scripts" / "book_to_skill.py"
 
 
 def refine_pdf(pdf_path: str, slug: str = "") -> dict:
@@ -39,8 +52,12 @@ def refine_pdf(pdf_path: str, slug: str = "") -> dict:
     if slug is None:
         slug = os.path.splitext(os.path.basename(pdf_path))[0].replace(" ", "-").lower()
 
+    script_path = resolve_book_to_skill()
+    if not script_path.exists():
+        return {"error": f"book_to_skill script not found: {script_path}"}
+
     result = subprocess.run(
-        [sys.executable, BOOK_TO_SKILL, "all", pdf_path, "--name", slug],
+        [sys.executable, str(script_path), "all", pdf_path, "--name", slug],
         capture_output=True, text=True, timeout=120
     )
 

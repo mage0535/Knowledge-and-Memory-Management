@@ -38,6 +38,6 @@ python3 /path/to/hermes/scripts/distill_methodologies.py --cache
 
 ## 扩展
 
-- 加 RSS 源：编辑 `~/.hermes/skills/external/Horizon/data/config.json` 的 `sources.rss` 数组
+- 加 RSS 源：编辑 `${AGENT_HOME:-$HOME/.hermes}/skills/external/Horizon/data/config.json` 的 `sources.rss` 数组
 - 调评分阈值：修改 `filtering.ai_score_threshold` (默认 3.0)
 - 加 GitHub Trending：在 config.json 的 `sources.github` 中添加 repo
