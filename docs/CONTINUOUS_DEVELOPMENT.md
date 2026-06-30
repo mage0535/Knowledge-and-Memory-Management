@@ -3760,3 +3760,142 @@ All planned architecture layers are implemented, tested, documented, and deploye
 
 The project is feature-complete for its current architecture phase.
 Next cycle: operational quality metrics and real-world data pipeline optimization.
+
+## 2026-06-30 最终核查报告
+
+### 核查结果
+
+| 检查项 | 状态 | 证据 |
+|--------|------|------|
+| 服务器 git status | clean | 无未提交修改 |
+| 服务器 HEAD | 5e0af70 | git log |
+| 核心模块 (22个) | 全部存在 | ls -1 src/... |
+| 版本号 | 
+
+## 2026-06-30 最终核查报告
+
+### 核查结果
+
+| 检查项 | 状态 | 证据 |
+|--------|------|------|
+| 服务器 git status | clean | 无未提交修改 |
+| 服务器 HEAD | 5e0af70 | git log |
+| 核心模块 (22个) | 全部存在 | ls -1 src/... |
+| 版本号 | 0.2.0 | src/__init__.py, plugin.yaml, capability.yaml |
+| pytest | 83 passed | python3 -m pytest -q |
+| sensitive_scan | ok (76 files) | python3 scripts/sensitive_scan.py |
+| sidecar 编译 | 通过 | python3 -m py_compile memory_governance_rebuild.py |
+| KMM cron | 2条活跃 | 0 2 * * * nightly, 0 4 * * 0 discovery |
+| 性能基准 | 正常 | 319 notes/s, 0.5ms/analysis, 46MB RSS |
+| GitHub | 5e0af70 | 已推送 |
+| 本地 | 纯净版 | robocopy 同步，11个新文件验证 |
+
+### 给接手同事的项目传递包
+
+```bash
+# 克隆
+git clone https://github.com/mage0535/Knowledge-and-Memory-Management.git
+cd Knowledge-and-Memory-Management
+
+# 安装 (非交互模式)
+export AGENT_HOME="${AGENT_HOME:-$HOME/.hermes}"
+KMM_NONINTERACTIVE=1 KMM_SKIP_CRON=1 bash install.sh
+
+# 验证
+python3 -m pytest -q                        # 83 passed
+python3 scripts/sensitive_scan.py           # scan ok
+python3 scripts/kmm_e2e_smoke.py            # ok: true
+python3 tests/bench_kmm_performance.py       # 性能基准
+bash $AGENT_HOME/scripts/verify_plugin.sh
+
+# 文档入口
+cat docs/CONTINUOUS_DEVELOPMENT.md          # 完整开发历史
+cat docs/api-reference.md                   # API 参考
+cat docs/knowledge-object-schema.md         # 知识对象协议
+```
+
+### 生产服务器部署验证
+
+```bash
+# 1. 安装
+cd /root/Knowledge-and-Memory-Management
+KMM_NONINTERACTIVE=1 KMM_SKIP_CRON=1 bash install.sh
+
+# 2. cron 增量添加
+KMM_NONINTERACTIVE=1 KMM_SKIP_CRON=0 bash install.sh
+
+# 3. 验证
+bash /root/.hermes/scripts/verify_plugin.sh
+python3 /root/.hermes/scripts/knowledge_discovery.py
+```
+
+### 提交链 (完整)
+
+```
+Session 1: 74977b9 baseline
+Session 2: 8472205 planning
+          4e6401d Tier A+C implementation
+Session 3: 129d75a A1 cron cutover
+Session 4: 1a0ad6a P0-P5 expansion
+Session 5: 0f96103 A1-B3 expansion
+Session 6: 49bfe2e gap closure
+Session 7: 3e67b98 v0.2.0 release (LLM + benchmarks + pipeline tests)
+          5e0af70 final session record (current HEAD)
+```
+
+---
+
+## 下一步方向分析
+
+### 当前项目成熟度
+
+KMM v0.2.0 处于架构完备阶段：31 modules, 83 tests, 5 adapters, 3 optional engines。
+所有计划层均已实现，下一步应聚焦运维质量和实际数据验证。
+
+### 优先级 P1-P6
+
+#### P1: Sidecar 端到端验证 (预计 30min)
+
+当前: memory_governance_rebuild.py 已加入 refresh_knowledge_object_index 和 knowledge_object_index_fts 搜索。
+验证: 触发一次 governance rebuild，确认知识对象被索引并在 L3 recall 中被检索。
+
+```bash
+python3 /root/.hermes/scripts/memory_governance_rebuild.py
+sqlite3 /root/.hermes/memory_governance.db "SELECT * FROM governance_meta WHERE key LIKE '%knowledge_object%'"
+```
+
+#### P2: KMM bisync 取代 legacy copy (预计 1h)
+
+当前: cron 中有 legacy rclone copy 和未激活的 KMM bisync。
+建议: 设 KMM_SYNC_REMOTE=onedrive:knowledge-test，先验证 bisync 在测试目录，确认无误后替换。
+
+#### P3: 性能回归基线 CI (预计 1h)
+
+bench_kmm_performance.py 可运行但未集成 CI。在 GitHub Actions 中加入 benchmark，每次 PR 自动对比 p50/p99。
+
+#### P4: MCP HTTP 传输 (预计 2h)
+
+当前 MCP server 仅 stdio。添加 HTTP 传输: KMM_MCP_TRANSPORT=http KMM_MCP_PORT=9797。
+
+#### P5: 知识图谱边持久化 (预计 2h)
+
+extract_relations 提取关系但未写入 gbrain。完善后 KMM 可产出直接用于 GraphRAG 的图数据。
+
+#### P6: KMM 监控面板 (预计 1h)
+
+kmm-health.json 已产出。在 sidecar metrics_dashboard 中添加 KMM 面板。
+
+### 不建议的方向
+
+1. 更多 source adapter: 31 模块已覆盖核心场景。更多是配置工作非架构工作。
+2. Rust 重写: 319 notes/s, 46MB 无瓶颈。Python 生产力优势远超性能损失。
+3. 微服务拆分: 当前单体足够，拆分增加复杂度无收益。
+4. Jupyter 集成: 非 KMM 核心定位。Jupyter 用户通过 Python API 调用即可。
+
+### 给接手同事的建议
+
+1. 从 docs/CONTINUOUS_DEVELOPMENT.md 开始了解完整历史
+2. 先本地运行 pytest -q 和 kmm_e2e_smoke.py
+3. 按 P1-P6 推进: 每项独立可验证
+4. 每次修改后更新本文档保持连续性
+5. 版本号 semver: 小功能 0.2.1, 大功能 0.3.0
