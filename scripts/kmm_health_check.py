@@ -42,7 +42,7 @@ def collect_health() -> dict:
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "kmm_version": "0.1.0",
+        "kmm_version": "0.2.0",
         "agent_home": str(agent_home),
         "notes_root": str(notes_root),
         "notes": {

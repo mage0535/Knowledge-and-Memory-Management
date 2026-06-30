@@ -6,7 +6,7 @@ set -euo pipefail
 # 为已安装记忆体系统的 AI Agent 添加知识采集和云盘同步能力
 # ============================================================
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 PLUGIN_NAME="Knowledge and Memory Management"
 PLUGIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENT_HOME_OVERRIDE="${AGENT_HOME:-${HERMES_HOME:-}}"

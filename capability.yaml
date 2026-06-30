@@ -1,6 +1,6 @@
 # KMM Capability Manifest
 kmm:
-  version: "0.1.0"
+  version: "0.2.0"
   capabilities:
     - id: kmm.collect.web
       description: "Collect web page content into structured notes with knowledge objects"

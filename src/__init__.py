@@ -10,4 +10,4 @@ v0.1.0 — public KMM runtime with document conversion, note generation, recall 
   - notes_rag: 笔记与 RAG 知识库管理
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
