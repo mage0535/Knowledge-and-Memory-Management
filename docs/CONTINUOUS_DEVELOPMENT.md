@@ -2417,3 +2417,78 @@ Each phase is gated by the following before proceeding to the next:
 - This document updated with implementation notes
 - GitHub and server in sync
 
+
+## 2026-06-30 Tier A+C Implementation
+
+### What landed
+
+Tier A (carry-over) and Tier C (optimization) items from the next-phase plan have been implemented and validated.
+
+#### A6: Schema Migration Utility
+
+File: src/knowledge_collector/analysis.py
+
+- Added migrate_knowledge_object(obj, target_version) function.
+- Migration table supports v1 → v1 identity path, extendable for future versions.
+- Added _compact_knowledge_object to remove empty optional fields for storage optimization.
+- Added SCHEMA_VERSIONS list for runtime version discovery.
+- Raises ValueError with supported version list when no migration path exists.
+
+#### C1: Knowledge-Object Dedup
+
+File: src/knowledge_collector/note_generator.py
+
+- Added _find_existing_note(notes_root, note_id, content) function.
+- Uses SHA256 content hash before creating a new note.
+- Returns existing note with dedup: True when content matches.
+- Prevents duplicate note creation from repeated collection of same source.
+
+#### C3: Security Scan Enhancement
+
+File: scripts/sensitive_scan.py
+
+- Added scan_knowledge_json(repo_path) for scanning *.knowledge.json for leaked paths.
+- Detects /root/, /home/<user>/, and C:\Users\ patterns in knowledge JSON.
+- Self-exclusion: findings from sensitive_scan.py itself are filtered out.
+- False-positive exclusion: docs/cloud-sync.md and scripts/install_rclone_drives.sh skipped for inline_secret_marker (rclone config documentation).
+- Version number 4.10.0.84 (opencv-python) added to ALLOWED_IPS.
+
+#### P0.2: Agent-Agnostic CLI
+
+Files modified:
+- scripts/knowledge_discovery.py — added --agent-home and --days CLI args
+- scripts/lightweight_recall.py — added --agent-home CLI arg
+- scripts/knowledge_fetch_router.py — added --agent-home CLI arg, proper argparse
+- scripts/knowledge_analysis.py — added --agent-home passthrough
+
+All scripts now accept --agent-home PATH to override AGENT_HOME env, enabling multi-agent directory support (Claude Code, Codex, Cursor, Hermes).
+
+#### A3 + C4: Documentation
+
+New files:
+- docs/knowledge-object-schema.md — full v1 schema specification with field descriptions, quality scoring algorithm, deterministic extractor internals, and migration policy.
+- docs/api-reference.md — complete public API reference for knowledge_collector, notes_rag, cloud_sync, and knowledge_augmentation modules.
+
+### Validation
+
+- python -m compileall src scripts tests: passed
+- pytest -q: 40 passed
+- python scripts/kmm_e2e_smoke.py: ok: true
+- python scripts/sensitive_scan.py: scan ok (58 files)
+
+### Server State
+
+- Git status: clean (all changes committed as 4e6401d)
+- Remote: clean public URL (https://github.com/mage0535/Knowledge-and-Memory-Management.git)
+- Cron: NOT yet cut over (A1 pending approval). Current crontab has legacy entries:
+  - /root/knowledge/scanner/cache-cleaner.py — not KMM-managed
+  - clone copy ... onedrive:Obsidian/... — legacy sync, not KMM bisync
+  - /root/knowledge/scanner/gbrain-maintenance.sh — not KMM-managed
+
+### Next Actions
+
+1. Push commit 4e6401d to GitHub
+2. Sync local Windows workspace to clean state
+3. A1: decide on cron cutover (approve → run installer with KMM_SKIP_CRON=0)
+4. Begin Phase 2 (P1 document ingestion) or Phase 3 (A4+A5 sidecar integration)
+
