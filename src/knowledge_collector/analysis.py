@@ -1,103 +1,420 @@
+"""Deterministic knowledge analysis for KMM public runtime.
+
+This module is the boundary between acquisition and note rendering. It does not
+require network access or LLM credentials, so public installs and CI can produce
+usable knowledge objects consistently.
 """
-关键词分析与知识扩展 — 全工具清单
 
-从采集内容中提取关键信息、交叉验证、扩展关联知识。
-"""
+from __future__ import annotations
 
-class AnalysisTools:
-    """知识分析 — 7 种分析工具"""
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+import hashlib
+import json
+import re
+from typing import Any, Iterable
 
-    TOOLS = {
-        "web_search": {
-            "type": "builtin",
-            "level": "⭐⭐⭐⭐⭐",
-            "description": "网络搜索引擎 — 支持多后端，用于知识扩展与交叉验证",
-            "tool": "web_search",
-            "features": [
-                "多后端搜索（Google/Bing/DuckDuckGo/Brave等）",
-                "站点限定（site:）",
-                "文件类型限定（filetype:）",
-                "每次最多 100 条结果",
-            ],
-            "use_cases": [
-                "关键词→搜索扩展关联知识",
-                "交叉验证信息准确性",
-                "溯源原始出处",
-            ],
-            "status": "已部署 · 生产中",
-        },
-        "web_extract": {
-            "type": "builtin",
-            "level": "⭐⭐⭐⭐",
-            "description": "URL 内容提取与 Markdown 化 — 配合搜索做深度验证",
-            "tool": "web_extract",
-            "features": [
-                "URL → Markdown 全文",
-                "PDF URL 自动转换",
-                "5000字内全文输出",
-            ],
-            "status": "已部署 · 生产中",
-        },
-        "nli_fact_check": {
-            "type": "script",
-            "level": "⭐⭐⭐",
-            "description": "NLI 事实核查 — 基于自然语言推理的判断一致性验证",
-            "script": "scripts/nli_fact_check.py",
-            "features": [
-                "声明与源文本的一致性判断",
-                "矛盾/中立/支持的自动分类",
-            ],
-            "status": "已部署",
-        },
-        "comment_summary": {
-            "type": "script",
-            "level": "⭐⭐⭐",
-            "description": "评论摘要 — 从社交媒体评论中提取关键观点",
-            "script": "scripts/comment_summary.py",
-            "features": [
-                "评论情感分类",
-                "关键观点提取",
-                "高频词分析",
-            ],
-            "status": "已部署",
-        },
-        "enrich_news": {
-            "type": "script",
-            "level": "⭐⭐⭐",
-            "description": "新闻内容丰富 — 自动添加背景信息和关联阅读",
-            "script": "scripts/enrich_news.py",
-            "features": [
-                "实体识别",
-                "背景知识自动补充",
-                "关联事件链接",
-            ],
-            "status": "已部署",
-        },
-        "keyword_analysis": {
-            "type": "plugin",
-            "level": "⭐⭐⭐⭐",
-            "description": "关键词自动提取与分析 — 中英文关键词抽取",
-            "features": [
-                "TF-IDF 关键词提取",
-                "命名实体识别",
-                "热词趋势分析",
-                "词云生成",
-            ],
-            "integration": "通过 LLM 调用或独立 NLP 管线",
-            "status": "可用",
-        },
-        "cross_validate": {
-            "type": "workflow",
-            "level": "⭐⭐⭐⭐⭐",
-            "description": "多源交叉验证工作流 — 同一信息经多源反复确认",
-            "workflow": [
-                "提取声明（claim extraction）",
-                "多源搜索（multi-source search）",
-                "一致性比对（consistency check）",
-                "置信度评分（confidence scoring）",
-                "报告输出（verification report）",
-            ],
-            "example": "FDE 图文笔记交叉验证：3 轮搜索确认 FDE=Forward Deployed Engineer 定义",
-            "status": "已验证流程",
-        },
+from runtime_support import slugify
+
+
+SCHEMA_VERSION = "kmm.knowledge_object.v1"
+
+STOPWORDS = {
+    "about",
+    "after",
+    "again",
+    "and",
+    "also",
+    "because",
+    "before",
+    "between",
+    "could",
+    "for",
+    "from",
+    "have",
+    "into",
+    "more",
+    "must",
+    "only",
+    "should",
+    "than",
+    "that",
+    "the",
+    "their",
+    "there",
+    "these",
+    "this",
+    "through",
+    "with",
+    "without",
+    "would",
+    "your",
+}
+
+ACTION_MARKERS = (
+    "todo",
+    "action",
+    "next",
+    "should",
+    "must",
+    "need to",
+    "needs to",
+    "recommended",
+    "建议",
+    "需要",
+    "下一步",
+    "必须",
+)
+
+RISK_MARKERS = (
+    "risk",
+    "issue",
+    "problem",
+    "fail",
+    "missing",
+    "blocked",
+    "uncertain",
+    "limitation",
+    "风险",
+    "问题",
+    "失败",
+    "缺失",
+    "不确定",
+)
+
+CLAIM_MARKERS = (
+    " is ",
+    " are ",
+    " was ",
+    " were ",
+    " means ",
+    " enables ",
+    " supports ",
+    " should ",
+    " must ",
+    " can ",
+    "为",
+    "是",
+    "支持",
+    "能够",
+    "可以",
+)
+
+
+@dataclass
+class ContentBlock:
+    """Normalized content block from a source adapter."""
+
+    type: str
+    text: str
+    order: int = 0
+    source_ref: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class KnowledgeObject:
+    """Machine-readable object shared by note rendering and future indexing."""
+
+    schema_version: str
+    object_id: str
+    title: str
+    source_type: str
+    source_ref: str
+    language: str
+    summary: str
+    keywords: list[str]
+    concepts: list[dict[str, Any]]
+    claims: list[dict[str, Any]]
+    action_items: list[str]
+    open_questions: list[str]
+    risks: list[str]
+    timeline: list[dict[str, str]]
+    content_blocks: list[dict[str, Any]]
+    quality: dict[str, Any]
+    created_at: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def normalize_material(material: dict[str, Any] | str | None, source_type: str = "article") -> dict[str, Any]:
+    """Normalize caller material into a predictable payload."""
+
+    if material is None:
+        payload: dict[str, Any] = {}
+    elif isinstance(material, str):
+        payload = {"content": material}
+    else:
+        payload = dict(material)
+
+    content = payload.get("content") or payload.get("material") or payload.get("text") or ""
+    title = payload.get("title") or payload.get("name") or f"{source_type}-note"
+    payload["title"] = str(title).strip() or f"{source_type}-note"
+    payload["content"] = str(content)
+    payload["source_type"] = str(payload.get("source_type") or source_type)
+    payload["source_ref"] = str(payload.get("source_ref") or payload.get("url") or payload.get("path") or "")
+    payload["metadata"] = dict(payload.get("metadata") or {})
+    payload["content_blocks"] = _coerce_blocks(payload)
+    return payload
+
+
+def analyze_material(material: dict[str, Any] | str | None, source_type: str = "article") -> dict[str, Any]:
+    """Analyze source material and return a JSON-serializable knowledge object."""
+
+    return KnowledgeAnalyzer().analyze(material, source_type=source_type).to_dict()
+
+
+def render_knowledge_note(knowledge: dict[str, Any], *, include_source: bool = True) -> str:
+    """Render a readable Markdown note from a knowledge object."""
+
+    lines = [
+        f"# {knowledge['title']}",
+        "",
+        "## Executive Summary",
+        knowledge.get("summary") or "No summary available.",
+        "",
+        "## Key Concepts",
+    ]
+    concepts = knowledge.get("concepts") or []
+    lines.extend(_bullet(item["name"] for item in concepts) or ["- None detected."])
+    lines.extend(["", "## Claims And Evidence"])
+    claims = knowledge.get("claims") or []
+    if claims:
+        for item in claims:
+            lines.append(f"- {item['text']}")
+            if item.get("evidence"):
+                lines.append(f"  Evidence: {item['evidence']}")
+    else:
+        lines.append("- None detected.")
+
+    lines.extend(["", "## Action Items"])
+    lines.extend(_bullet(knowledge.get("action_items") or []) or ["- None detected."])
+    lines.extend(["", "## Open Questions"])
+    lines.extend(_bullet(knowledge.get("open_questions") or []) or ["- None detected."])
+    lines.extend(["", "## Risks And Gaps"])
+    lines.extend(_bullet(knowledge.get("risks") or []) or ["- None detected."])
+
+    timeline = knowledge.get("timeline") or []
+    if timeline:
+        lines.extend(["", "## Timeline"])
+        for item in timeline:
+            lines.append(f"- {item['date']}: {item['text']}")
+
+    quality = knowledge.get("quality") or {}
+    lines.extend(
+        [
+            "",
+            "## Retrieval Metadata",
+            f"- Language: {knowledge.get('language', 'unknown')}",
+            f"- Keywords: {', '.join(knowledge.get('keywords') or []) or 'none'}",
+            f"- Quality score: {quality.get('score', 0)}",
+            f"- Extraction confidence: {quality.get('confidence', 'unknown')}",
+        ]
+    )
+
+    if include_source:
+        source_text = "\n\n".join(block.get("text", "") for block in knowledge.get("content_blocks") or [] if block.get("text"))
+        lines.extend(["", "## Source Content", source_text.strip()])
+
+    return "\n".join(lines).strip() + "\n"
+
+
+class KnowledgeAnalyzer:
+    """Dependency-light analyzer for source text, transcripts, OCR, and documents."""
+
+    def analyze(self, material: dict[str, Any] | str | None, source_type: str = "article") -> KnowledgeObject:
+        payload = normalize_material(material, source_type=source_type)
+        blocks = payload["content_blocks"]
+        text = "\n\n".join(block.text for block in blocks if block.text).strip()
+        sentences = _split_sentences(text)
+        language = _detect_language(text)
+        keywords = _keywords(text, limit=12)
+        concepts = _concepts(keywords, sentences)
+        claims = _claims(sentences)
+        action_items = _marked_sentences(sentences, ACTION_MARKERS, limit=8)
+        questions = [sentence for sentence in sentences if "?" in sentence or "？" in sentence][:8]
+        risks = _marked_sentences(sentences, RISK_MARKERS, limit=8)
+        timeline = _timeline(sentences)
+        summary = _summary(sentences, keywords)
+        quality = _quality(text, blocks, claims, keywords)
+        object_id = _object_id(payload["title"], text, payload["source_ref"])
+
+        return KnowledgeObject(
+            schema_version=SCHEMA_VERSION,
+            object_id=object_id,
+            title=payload["title"],
+            source_type=payload["source_type"],
+            source_ref=payload["source_ref"],
+            language=language,
+            summary=summary,
+            keywords=keywords,
+            concepts=concepts,
+            claims=claims,
+            action_items=action_items,
+            open_questions=questions,
+            risks=risks,
+            timeline=timeline,
+            content_blocks=[asdict(block) for block in blocks],
+            quality=quality,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            metadata=payload["metadata"],
+        )
+
+
+def _coerce_blocks(payload: dict[str, Any]) -> list[ContentBlock]:
+    raw_blocks = payload.get("content_blocks")
+    blocks: list[ContentBlock] = []
+    if isinstance(raw_blocks, list):
+        for index, item in enumerate(raw_blocks):
+            if isinstance(item, ContentBlock):
+                blocks.append(item)
+                continue
+            if isinstance(item, dict):
+                text = str(item.get("text") or item.get("content") or "").strip()
+                if not text:
+                    continue
+                blocks.append(
+                    ContentBlock(
+                        type=str(item.get("type") or "text"),
+                        text=text,
+                        order=int(item.get("order", index)),
+                        source_ref=str(item.get("source_ref") or payload.get("source_ref") or ""),
+                        metadata=dict(item.get("metadata") or {}),
+                    )
+                )
+    if not blocks:
+        blocks.append(
+            ContentBlock(
+                type=str(payload.get("source_type") or "text"),
+                text=str(payload.get("content") or ""),
+                order=0,
+                source_ref=str(payload.get("source_ref") or ""),
+                metadata=dict(payload.get("metadata") or {}),
+            )
+        )
+    return blocks
+
+
+def _split_sentences(text: str) -> list[str]:
+    chunks = re.split(r"(?<=[.!?。！？])\s+|\n+", text)
+    cleaned = [re.sub(r"\s+", " ", chunk).strip(" -\t") for chunk in chunks]
+    return [chunk for chunk in cleaned if len(chunk) >= 8][:80]
+
+
+def _detect_language(text: str) -> str:
+    if not text.strip():
+        return "unknown"
+    cjk = len(re.findall(r"[\u4e00-\u9fff]", text))
+    latin = len(re.findall(r"[A-Za-z]", text))
+    if cjk and cjk >= latin * 0.3:
+        return "zh"
+    if latin:
+        return "en"
+    return "unknown"
+
+
+def _keywords(text: str, limit: int) -> list[str]:
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}|[\u4e00-\u9fff]{2,}", text.lower())
+    counts: dict[str, int] = {}
+    for token in tokens:
+        if token in STOPWORDS:
+            continue
+        counts[token] = counts.get(token, 0) + 1
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [token for token, _ in ranked[:limit]]
+
+
+def _concepts(keywords: list[str], sentences: list[str]) -> list[dict[str, Any]]:
+    concepts = []
+    for keyword in keywords[:10]:
+        evidence = next((sentence for sentence in sentences if keyword.lower() in sentence.lower()), "")
+        concepts.append({"name": keyword, "evidence": evidence[:240], "weight": 1.0})
+    return concepts
+
+
+def _claims(sentences: list[str]) -> list[dict[str, Any]]:
+    claims = []
+    for sentence in sentences:
+        lower = f" {sentence.lower()} "
+        if any(marker in lower or marker in sentence for marker in CLAIM_MARKERS):
+            claims.append({"text": sentence[:300], "evidence": sentence[:300], "confidence": 0.62})
+        if len(claims) >= 10:
+            break
+    return claims
+
+
+def _marked_sentences(sentences: list[str], markers: Iterable[str], limit: int) -> list[str]:
+    found = []
+    for sentence in sentences:
+        lower = sentence.lower()
+        if any(marker in lower or marker in sentence for marker in markers):
+            found.append(sentence[:300])
+        if len(found) >= limit:
+            break
+    return found
+
+
+def _timeline(sentences: list[str]) -> list[dict[str, str]]:
+    results = []
+    date_pattern = re.compile(r"\b(?:20\d{2}|19\d{2})(?:[-/.年](?:0?[1-9]|1[0-2]))?(?:[-/.月](?:0?[1-9]|[12]\d|3[01]))?")
+    for sentence in sentences:
+        match = date_pattern.search(sentence)
+        if match:
+            results.append({"date": match.group(0), "text": sentence[:240]})
+        if len(results) >= 8:
+            break
+    return results
+
+
+def _summary(sentences: list[str], keywords: list[str]) -> str:
+    if not sentences:
+        return "No analyzable source content was provided."
+    scored = []
+    for index, sentence in enumerate(sentences[:30]):
+        keyword_hits = sum(1 for keyword in keywords[:8] if keyword.lower() in sentence.lower())
+        scored.append((keyword_hits, -index, sentence))
+    selected = [item[2] for item in sorted(scored, reverse=True)[:3]]
+    selected.sort(key=lambda sentence: sentences.index(sentence))
+    return " ".join(selected)
+
+
+def _quality(text: str, blocks: list[ContentBlock], claims: list[dict[str, Any]], keywords: list[str]) -> dict[str, Any]:
+    char_count = len(text)
+    score = 0.0
+    if char_count >= 120:
+        score += 0.3
+    if len(blocks) >= 1:
+        score += 0.2
+    if claims:
+        score += 0.25
+    if len(keywords) >= 3:
+        score += 0.15
+    if char_count >= 1000:
+        score += 0.1
+    score = round(min(score, 1.0), 2)
+    confidence = "high" if score >= 0.75 else "medium" if score >= 0.45 else "low"
+    return {
+        "score": score,
+        "confidence": confidence,
+        "char_count": char_count,
+        "block_count": len(blocks),
+        "claim_count": len(claims),
+        "keyword_count": len(keywords),
     }
+
+
+def _object_id(title: str, text: str, source_ref: str) -> str:
+    digest = hashlib.sha256(f"{title}\n{source_ref}\n{text}".encode("utf-8")).hexdigest()[:16]
+    return f"ko-{slugify(title)}-{digest}"
+
+
+def _bullet(items: Iterable[str]) -> list[str]:
+    return [f"- {item}" for item in items if str(item).strip()]
+
+
+def dumps_knowledge(knowledge: dict[str, Any]) -> str:
+    """Serialize a knowledge object with stable formatting."""
+
+    return json.dumps(knowledge, ensure_ascii=False, indent=2, sort_keys=True)

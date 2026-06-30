@@ -11,7 +11,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
 from cloud_sync import on_pre_sync
-from knowledge_collector import collect_article, collect_book, collect_document, collect_video, generate_note, on_collect
+from knowledge_collector import analyze_material, collect_article, collect_book, collect_document, collect_video, generate_note, on_collect
 from notes_rag import create_note, search_notes
 from knowledge_collector import web as web_module
 from knowledge_augmentation import AugmentationConfig
@@ -46,6 +46,30 @@ def test_generate_and_search_note_round_trip(monkeypatch, tmp_path: Path):
     assert Path(note["note_path"]).exists()
     assert results
     assert results[0]["source"] == "local_note"
+
+
+def test_knowledge_analysis_layer_extracts_useful_objects():
+    analysis = analyze_material(
+        {
+            "title": "Layered Recall",
+            "content": (
+                "Layered recall is a memory architecture. "
+                "It should preserve source provenance and reduce missing context risk. "
+                "Next, index claims and concepts for retrieval in 2026."
+            ),
+            "source_ref": "memory://example",
+        },
+        source_type="note",
+    )
+
+    assert analysis["schema_version"] == "kmm.knowledge_object.v1"
+    assert analysis["object_id"].startswith("ko-layered-recall-")
+    assert "layered" in analysis["keywords"]
+    assert analysis["claims"]
+    assert analysis["action_items"]
+    assert analysis["risks"]
+    assert analysis["timeline"]
+    assert analysis["quality"]["confidence"] in {"medium", "high"}
 
 
 def test_augmented_search_honors_local_first_false(monkeypatch):
@@ -131,7 +155,11 @@ def test_collect_web_uses_structured_note_pipeline(monkeypatch, tmp_path: Path):
 
     assert result.title == "Example"
     assert Path(result.note_path).exists()
-    assert "Useful public content" in Path(result.note_path).read_text(encoding="utf-8")
+    note_text = Path(result.note_path).read_text(encoding="utf-8")
+    assert "Useful public content" in note_text
+    assert "## Executive Summary" in note_text
+    knowledge_path = Path(result.note_path).with_suffix(".knowledge.json")
+    assert knowledge_path.exists()
 
 
 def test_collect_article_supports_url_and_keyword_modes(monkeypatch, tmp_path: Path):
@@ -192,6 +220,28 @@ def test_generate_note_requires_content(monkeypatch, tmp_path: Path):
         assert "content" in str(exc)
     else:
         raise AssertionError("empty content should fail")
+
+
+def test_generate_note_writes_knowledge_sidecar(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("KMM_NOTES_DIR", str(tmp_path / "notes"))
+
+    note = generate_note(
+        {
+            "title": "Structured Capture",
+            "content": "KMM should extract claims, concepts, and action items from source content.",
+            "tags": ["kmm"],
+        },
+        template="note",
+    )
+
+    note_path = Path(note["note_path"])
+    knowledge_path = Path(note["knowledge_path"])
+    assert note_path.exists()
+    assert knowledge_path.exists()
+    assert note["analysis"]["schema_version"] == "kmm.knowledge_object.v1"
+    text = note_path.read_text(encoding="utf-8")
+    assert "## Claims And Evidence" in text
+    assert "knowledge_object" in text
 
 
 def test_uninstall_preserves_knowledge_data():

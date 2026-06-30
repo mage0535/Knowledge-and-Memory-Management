@@ -140,7 +140,7 @@ def main() -> int:
     )
 
     from cloud_sync import CloudSyncEngine
-    from knowledge_collector import collect_article, collect_book, collect_document, collect_video, collect_web, generate_note
+    from knowledge_collector import analyze_material, collect_article, collect_book, collect_document, collect_video, collect_web, generate_note
     from notes_rag import create_note, search_notes
     import book_cache_manager
     import book_keyword_index
@@ -166,6 +166,7 @@ def main() -> int:
         video_result = collect_video("https://www.youtube.com/watch?v=abc123")
         document_result = collect_document(str(md))
         note_result = generate_note({"title": "Generated", "content": "Curated structured content"}, template="note")
+        analysis_result = analyze_material({"title": "Smoke Analysis", "content": "KMM should extract concepts and claims."}, source_type="note")
         rag_note = create_note("Agent Memory Architecture", "Layered memory with curated notes", domain="shared")
         rag_results = search_notes("Layered memory", domains=["shared"])
         discovery_results = knowledge_discovery.discover_new_notes(days=30)
@@ -223,6 +224,8 @@ def main() -> int:
         "video_note_exists": Path(video_result.note_path).exists(),
         "document_note_exists": Path(document_result.note_path).exists(),
         "generated_note_exists": Path(note_result["note_path"]).exists(),
+        "generated_knowledge_exists": Path(note_result["knowledge_path"]).exists(),
+        "analysis_schema": analysis_result["schema_version"],
         "rag_note_exists": Path(rag_note["note_path"]).exists(),
         "rag_results_count": len(rag_results),
         "discovery_count": len(discovery_results),
@@ -246,9 +249,11 @@ def main() -> int:
     failures = []
     if results["web_title"] != "KMM Smoke":
         failures.append("collect_web title mismatch")
-    for key in ("web_note_exists", "article_keyword_exists", "video_note_exists", "document_note_exists", "generated_note_exists", "rag_note_exists", "downloaded_exists"):
+    for key in ("web_note_exists", "article_keyword_exists", "video_note_exists", "document_note_exists", "generated_note_exists", "generated_knowledge_exists", "rag_note_exists", "downloaded_exists"):
         if not results[key]:
             failures.append(f"{key} failed")
+    if results["analysis_schema"] != "kmm.knowledge_object.v1":
+        failures.append("knowledge analysis schema mismatch")
     if results["rag_results_count"] < 1:
         failures.append("search_notes returned no results")
     if results["book_index_count"] != 2:

@@ -8,6 +8,7 @@ gbrain_link_orphans.py
 gray_validation_suite.py
 install_rclone_drives.sh
 knowledge_discovery.py
+knowledge_analysis.py
 knowledge_fetch_router.py
 lightweight_recall.py
 nightly_maintenance.py

@@ -8,6 +8,7 @@
 __version__ = "1.1.0"
 
 from .article import collect_article
+from .analysis import KnowledgeAnalyzer, analyze_material, render_knowledge_note
 from .document import (
     DocumentCollector,
     DocumentConversionError,
@@ -73,8 +74,10 @@ __all__ = [
     "DocumentConversionError",
     "DocumentConverter",
     "DocumentResult",
+    "KnowledgeAnalyzer",
     "SUPPORTED_EXTENSIONS",
     "SUPPORTED_FORMATS",
+    "analyze_material",
     "collect_article",
     "collect_book",
     "collect_document",
@@ -82,4 +85,5 @@ __all__ = [
     "collect_web",
     "generate_note",
     "on_collect",
+    "render_knowledge_note",
 ]

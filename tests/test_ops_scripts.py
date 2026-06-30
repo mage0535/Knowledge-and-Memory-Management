@@ -11,6 +11,7 @@ import book_to_skill
 import gbrain_compact
 import gbrain_link_orphans
 import gray_validation_suite
+import knowledge_analysis
 import recall_shadow_compare
 import sensitive_scan
 import sensenova_dispatcher
@@ -72,8 +73,16 @@ def test_sensenova_dispatcher_reports_missing_script(monkeypatch):
 
 def test_install_script_deploys_remaining_ops_scripts():
     content = (REPO / "configs" / "managed_scripts.txt").read_text(encoding="utf-8")
-    for name in ("gbrain_compact.py", "gbrain_link_orphans.py", "sensenova_dispatcher.py", "book_to_skill.py", "recall_shadow_compare.py", "gray_validation_suite.py"):
+    for name in ("gbrain_compact.py", "gbrain_link_orphans.py", "sensenova_dispatcher.py", "book_to_skill.py", "recall_shadow_compare.py", "gray_validation_suite.py", "knowledge_analysis.py"):
         assert name in content
+
+
+def test_knowledge_analysis_cli_outputs_schema(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["knowledge_analysis.py", "--text", "KMM should extract useful claims.", "--title", "KMM"])
+
+    assert knowledge_analysis.main() == 0
+    output = capsys.readouterr().out
+    assert '"schema_version": "kmm.knowledge_object.v1"' in output
 
 
 def test_recall_shadow_compare_summarizes_layer_counts(monkeypatch):
