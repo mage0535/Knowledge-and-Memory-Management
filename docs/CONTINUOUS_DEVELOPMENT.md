@@ -1794,3 +1794,626 @@ Recommended next task:
 2. Add object-level retrieval in KMM search results.
 3. Add optional provider hooks for LLM extraction while keeping deterministic fallback.
 4. Add a schema migration policy before `kmm.knowledge_object.v2`.
+
+## 2026-06-30 Next-Phase Full Planning
+
+### Planning authority
+
+This section is a full next-phase plan derived from:
+
+- current repository code state (src/, scripts/, tests/)
+- existing continuous development history above
+- cross-project integration state with hermes-memory-installer v3.5.1
+- GitHub planning documentation (README, collection-pipeline.md)
+- server runtime validation results
+
+The plan is organized into three tiers: carry-over (already planned but unfinished), new-priority (P0-P5 phased expansion), and optimization (quality, safety, observability).
+
+---
+
+## Tier A: Carry-Over — Already Planned But Unfinished
+
+These items were documented in earlier sections as  remaining work or next engineering direction and have not yet been completed.
+
+### A1. Server Production Cron Cutover
+
+**Current state**: server KMM installation was validated with KMM_SKIP_CRON=1. Cron entries are still managed outside the repository installer.
+
+**Required actions**:
+1. audit current server crontab for KMM-related entries
+2. map each entry to repository-managed script or mark as out-of-scope
+3. if approved, re-run installer with KMM_SKIP_CRON=0 and explicit KMM_SYNC_REMOTE
+4. verify cron entries after cutover
+5. record cutover evidence in this document
+
+**Success criteria**:
+- crontab -l shows KMM-managed entries (nightly_maintenance, knowledge_discovery, onedrive_bidirectional_sync)
+- manual trigger of each cron entry succeeds
+- gray validation suite passes with cron enabled
+
+**Risk**: cron misconfiguration could disrupt existing maintenance. Mitigated by gray rollout protocol in docs/GRAY_ROLLOUT.md.
+
+---
+
+### A2. Server Repository Clean-State Sync
+
+**Current state**: server repository working tree is dirty because import-resolution files were copied into place for runtime validation. The latest local fix commit was applied outside the GitHub mainline sync path.
+
+**Required actions**:
+1. push remaining local fix commit to GitHub when outbound connectivity is available
+2. fast-forward server repository checkout to that GitHub commit
+3. verify git status --short returns empty
+
+**Success criteria**:
+- server git status is clean
+- server git log --oneline -1 matches GitHub HEAD
+- server-remote URL is clean public URL (not tokenized)
+
+**Blockers**: outbound GitHub connectivity from server environment.
+
+---
+
+### A3. Formal KMM-Sidecar Knowledge-Object Protocol
+
+**Current state**: KMM produces *.knowledge.json sidecars at schema kmm.knowledge_object.v1. Sidecar knowledge_notes.py indexes rendered Markdown notes but does not consume knowledge JSON objects. Integration is path-and-environment-variable-driven, not contract-driven.
+
+**Required actions**:
+1. define versioned shared schema document (proto / JSON Schema / in-repo Markdown)
+
+2. KMM side:
+   - stabilize kmm.knowledge_object.v1 as the published contract
+   - ensure every generate_note call reliably writes the sidecar JSON
+   - add a validation fixture that checks JSON schema compliance
+
+3. Sidecar side:
+   - extend knowledge_notes.py to also index *.knowledge.json
+   - add knowledge-object-level FTS / metadata columns to knowledge_note_index
+   - expose object-level retrieval (facts, concepts, claims, quality score)
+   - make knowledge-object index rebuild incremental and signature-gated
+
+4. Shared observability:
+   - both projects emit compatible health artifacts referencing the same schema version
+   - schema version is recorded in governance_meta
+
+**Success criteria**:
+- 	est_kmm_integration.py on sidecar side verifies knowledge JSON indexing
+- KMM e2e smoke verifies sidecar JSON output
+- retrieval results include source_object_id and schema_version fields when sourced from knowledge JSON
+
+---
+
+### A4. Sidecar Knowledge-Object Indexing
+
+**Current state**: sidecar indexes markdown notes into knowledge_note_index and knowledge_note_index_fts. Knowledge JSON objects are present on disk but not indexed.
+
+**Required actions**:
+1. add knowledge_object_index table to governance schema
+2. columns: object_id, source_path, schema_version, title, summary, keywords, concepts_json, claims_json, action_items, risks, quality_score, created_at, indexed_at
+3. add knowledge_object_index_fts for full-text search over concepts, claims, and summaries
+4. extend memory_governance_rebuild.py to rebuild both note index and object index
+5. extend 	iered_context_injector.py to fuse object-level results into L3
+6. add object provenance to recall output (source_layer, object_id, quality_score)
+
+**Success criteria**:
+- governance rebuild indexes both notes and knowledge objects
+- tiered recall includes object-level results with schema-aware metadata
+- tests verify end-to-end round-trip: KMM generate → sidecar index → sidecar recall
+
+---
+
+### A5. LLM Extractor Hook (Optional, Deterministic Fallback Required)
+
+**Current state**: nalysis.py is purely deterministic and dependency-light. This is correct for the public baseline. An optional LLM extractor was documented as a next improvement.
+
+**Required actions**:
+1. add src/knowledge_collector/llm_analyzer.py with provider-agnostic hooks
+2. implement LlmKnowledgeAnalyzer that:
+   - accepts optional KMM_LLM_PROVIDER env (openai / anthropic / deepseek / etc.)
+   - falls back to deterministic KnowledgeAnalyzer when credentials are absent
+   - emits the same kmm.knowledge_object.v1 schema
+   - adds extractor: llm/openai vs extractor: deterministic provenance
+3. add quality.llm_score alongside existing quality.score
+4. add test for fallback path when no credentials are configured
+
+**Success criteria**:
+- deterministic path unchanged and tested
+- LLM path produces richer claims and relations when credentials are provided
+- no credential leakage in public repo
+
+---
+
+### A6. Schema Migration Policy
+
+**Current state**: schema version is kmm.knowledge_object.v1. No migration strategy exists for future schema changes.
+
+**Required actions**:
+1. document schema migration rules:
+   - additive fields are forward-compatible (minor version bump)
+   - renamed/removed fields require major version bump
+   - schema_version is always written into the JSON payload
+2. add migrate_knowledge_object(obj, target_version) function
+3. add migration test: 1 → v2 round-trip preserves all data
+4. policy: never delete a schema version; add migration path from every version to latest
+
+**Success criteria**:
+- schema doc exists in docs/knowledge-object-schema.md
+- migration utility is testable
+- CI enforces that every KnowledgeObject field has a docstring
+
+---
+
+## Tier B: New Priority — P0 to P5 Phased Expansion
+
+### P0: Production Closure & Multi-Agent Hardening
+
+**Goal**: KMM repository installer becomes the actual source of truth for production KMM runtime. Agent-agnostic assumptions are strengthened.
+
+#### P0.1: Server cutover completion (depends on A1, A2)
+
+- cut over remaining server KMM scripts to repository-installed versions
+- document server-side script inventory in docs/SERVER_SCRIPT_MAPPING.md
+- record cutover evidence
+
+#### P0.2: Agent-agnostic cleanup
+
+- audit all scripts and docs for Hermes-specific assumptions
+- replace HERMES_HOME-only fallbacks with AGENT_HOME as primary contract
+- add --agent-home CLI flag to all scripts that currently assume env-var-only
+- test with Claude Code, Codex, and Cursor directory layouts
+
+#### P0.3: Fresh-install validation
+
+- add 	ests/test_fresh_install.py:
+  - install into empty temp AGENT_HOME
+  - verify all managed scripts deployed
+  - verify plugin directory structure
+  - verify Python imports work from installed location
+
+#### P0.4: Upgrade validation
+
+- add 	ests/test_upgrade.py:
+  - install v0.1.0 baseline
+  - create test notes
+  - upgrade to new version
+  - verify existing notes preserved
+  - verify new scripts deployed
+
+#### P0.5: Uninstall safety
+
+- add 	ests/test_uninstall.py:
+  - verify uninstall removes managed scripts
+  - verify uninstall preserves note data
+  - verify uninstall preserves user rclone configuration
+
+---
+
+### P1: Document Ingestion Upgrade
+
+**Goal**: move from single-engine MarkItDown to multi-engine scored routing with explicit quality metadata.
+
+**Current state**: doc_parse_router.py supports liteparse → markitdown → pdftotext → plaintext fallback chain.
+
+**Target state**:
+
+`	ext
+document → engine selector by file type + size + OCR needs
+  → MarkItDown (lightweight, text-first)
+  → Docling (layout-aware, tables, complex)
+  → MinerU (OCR-heavy, scanned)
+  → plaintext fallback
+  → quality report per engine attempt
+`
+
+#### P1.1: Upgrade doc_parse_router.py
+
+- add engine registry with capability descriptors:
+  - supported formats
+  - OCR support
+  - table preservation
+  - layout awareness
+  - performance tier
+- replace linear chain with scored routing:
+  - file extension classification
+  - file size tier (small → fast, large → thorough)
+  - scanned-content detection heuristic
+- persist engine choice and fallback reason
+
+#### P1.2: Integrate Docling
+
+- add docling_project/docling as optional dependency
+- add parse_with_docling engine
+- emit comparable ContentBlock output to MarkItDown path
+- test with table-heavy PDFs and complex DOCX
+
+#### P1.3: Integrate MinerU
+
+- add opendatalab/MinerU as optional dependency
+- add parse_with_mineru engine for OCR-heavy PDFs and scanned documents
+- add OCR-quality flag in quality report
+
+#### P1.4: Cache reuse by file hash
+
+- compute SHA256 of source file before parsing
+- store parse result keyed by (engine, file_hash) in KMM cache directory
+- skip re-parse on cache hit
+- invalidate when engine version changes
+
+#### P1.5: Batch ingestion CLI
+
+- add python3 -m knowledge_collector.document --batch ./docs/ --recurse --format pdf,docx --output ./out/
+- support progress reporting and parallel workers
+- support --dry-run to preview routing plan without execution
+
+**Success criteria**:
+- doc_parse_router.py routing test covers all engines and fallback paths
+- file-hash caching test verifies cache hit avoids re-parse
+- batch CLI processes 20+ mixed-format files without error
+
+---
+
+### P2: Retrieval Quality Upgrade
+
+**Goal**: move from basic layer merge to hybrid retrieval with reranking.
+
+**Current state**: 
+otes_rag.py and lightweight_recall.py perform parallel layer search with simple score-sorted merge. No query preprocessing, no reranker.
+
+**Target state**:
+
+`	ext
+query
+  → query rewrite (spelling, expansion, language detection)
+  → hybrid search (lexical FTS + vector when available)
+  → fusion (RRF or weighted merge)
+  → rerank (cross-encoder or API-based)
+  → provenance-annotated results
+`
+
+#### P2.1: Query preprocessing
+
+- add src/knowledge_collector/query_rewrite.py
+- functions:
+  - expand_query: add synonyms and related terms
+  - detect_language: route to language-appropriate search fields
+  - extract_entities: identify named entities for exact-match boost
+- deterministic by default; optional LLM-enhanced expansion
+
+#### P2.2: Hybrid retrieval
+
+- integrate qdrant/qdrant-client as optional vector backend
+- store note embeddings (from hermes-memory-installer embedding pipeline)
+- hybrid search: FTS5 + Qdrant vector → RRF fusion
+
+#### P2.3: Reranker
+
+- add optional Jina AI reranker API integration
+- add KMM_RERANKER_API_KEY and KMM_RERANKER_MODEL env
+- rerank top-N fused results
+- add erank_score alongside etrieval_score in result metadata
+
+#### P2.4: Provenance scoring
+
+- add source_type, source_ref, extraction_quality, ecency to scoring
+- add configurable scoring weights via KMM_SEARCH_WEIGHTS env
+- add provenance field to every result: {source, layer, retrieval_score, rerank_score, quality_score, timestamp}
+
+#### P2.5: Retrieval evaluation fixtures
+
+- add 	ests/test_retrieval_quality.py
+- fixture datasets: English-tech, Chinese-finance, mixed-code, video-transcript
+- metrics: recall@5, precision@5, MRR
+- baseline regression test: known queries → expected result ordering
+
+**Success criteria**:
+- query rewrite improves recall@5 by ≥ 10% on evaluation fixtures
+- hybrid search MRR beats single-layer baseline
+- reranker preserves or improves top-3 precision
+- provenance metadata is parseable and complete
+
+---
+
+### P3: Video Knowledge Pipeline
+
+**Goal**: complete video ingestion from URL to timeline-based mixed-media notes.
+
+**Current state**: collect_video creates basic capture notes. No scene detection, no keyframe OCR, no timeline chunking.
+
+**Target pipeline**:
+
+`	ext
+URL → yt-dlp (metadata + subtitle)
+  → YouTube Transcript API (if available)
+  → Whisper ASR fallback
+  → PySceneDetect (scene boundaries)
+  → keyframe selection per scene
+  → PaddleOCR (frame text extraction)
+  → transcript + OCR fusion
+  → timeline chunking (30s-120s windows)
+  → knowledge analysis per chunk
+  → mixed-media note with images + text
+`
+
+#### P3.1: Platform adapter framework
+
+- add src/knowledge_collector/video_adapter.py
+- VideoAdapter base class:
+  - etch_metadata(url) → dict
+  - etch_subtitles(url) → list[dict] | None
+  - etch_audio(url) → Path
+  - platform class attribute
+- adapters: YouTubeAdapter, BilibiliAdapter, TikTokAdapter, DouyinAdapter
+- fallback: GenericVideoAdapter (yt-dlp only)
+
+#### P3.2: Scene detection and keyframe extraction
+
+- integrate PySceneDetect via subprocess or Python API
+- scene_split(video_path) → list[Scene]
+- select_keyframes(scenes, max_frames=20) → list[Frame]
+- keyframe selection strategy: middle frame of each scene, skip very short scenes
+
+#### P3.3: Frame OCR
+
+- wrap PaddleOCR as optional engine
+- ocr_frame(image_path) → str | None
+- batch OCR over keyframes with concurrency
+- store OCR text per frame with timestamp and confidence
+
+#### P3.4: Timeline chunking
+
+- chunk transcript by sentence boundaries into 30-120 second windows
+- attach keyframe and OCR text to each chunk
+- generate per-chunk summary
+
+#### P3.5: Mixed-media note generation
+
+- extend generate_note with 	emplate=video:
+  - cover section: metadata, executive summary
+  - timeline sections: timestamp + summary + keyframe + OCR + claims
+  - key takeaways section
+  - follow-up links
+- embed keyframe images as ![frame](path) in note
+- render video-specific knowledge object with timeline blocks
+
+**Success criteria**:
+- YouTube video → readable timeline note with screenshots
+- Bilibili video → transcript + keyframe note
+- short-video (TikTok/Douyin) → OCR-first note
+- all paths covered by unit tests and e2e smoke
+
+---
+
+### P4: Defended-Channel Ingestion
+
+**Goal**: add platform-specific adapters for content-heavy channels where direct extraction is fragile.
+
+**Common contract**: every channel adapter emits normalized ContentBlock list — not raw HTML or API response — so downstream processing remains channel-agnostic.
+
+#### P4.1: WeChat Official Account articles
+
+- WechatArticleAdapter in src/knowledge_collector/channels/wechat.py
+- extract: title, author, publish date, article body (Markdown), inline images
+- normalize to ContentBlock list
+- handle request restrictions gracefully (retry, user-agent rotation)
+
+**Reference**: jackwener/wechat-article-to-markdown
+
+#### P4.2: Xiaohongshu image-first pipeline
+
+- XhsAdapter in src/knowledge_collector/channels/xiaohongshu.py
+- workflow:
+  - user-authorized session capture
+  - download post media (images, video covers)
+  - OCR each image (PaddleOCR)
+  - extract caption/description
+  - order images by carousel position
+  - generate image-sequence note
+- note format: per-image block with image + OCR text + summary
+
+**Reference**: ReaJason/xhs, kohoj/skills (Xiaohongshu → Markdown via OCR)
+
+#### P4.3: Reddit structured thread ingestion
+
+- RedditAdapter in src/knowledge_collector/channels/reddit.py
+- prefer structured API paths over HTML scraping
+- capture: post title, subreddit, post body, top-N comments, comment hierarchy
+- generate discussion-style note:
+  - thread summary
+  - key viewpoints
+  - representative comments with scores
+  - related links
+
+**Reference**: socius-org/RedditHarbor, praw-dev/asyncpraw
+
+#### P4.4: Hacker News official API adapter
+
+- HnAdapter in src/knowledge_collector/channels/hackernews.py
+- use official HackerNews/API
+- capture: story metadata, outbound link, score, comment tree
+- generate: story summary, key discussion themes, notable technical takeaways
+
+#### P4.5: CSDN article adapter
+
+- CsdnAdapter in src/knowledge_collector/channels/csdn.py
+- normalize article body to Markdown
+- preserve code blocks, headings, images, references
+- auto-classify article topic into KMM note taxonomy
+
+#### P4.6: Channel adapter registry
+
+- add src/knowledge_collector/channels/__init__.py with CHANNEL_REGISTRY
+- collect_article auto-routes to channel adapter when source matches a registered platform
+- channel adapters are importable but execution is guarded by availability of platform-specific dependencies
+
+---
+
+### P5: Scheduling, Observability & MCP Exposure
+
+#### P5.1: Managed workflow engine
+
+- integrate lightweight workflow orchestrator (recommend dagu-org/dagu)
+- wrap KMM critical tasks as DAG nodes:
+  - knowledge_discovery.py
+  - 
+ightly_maintenance.py
+  - ook_cache_manager.py
+  - onedrive_bidirectional_sync.sh
+- add per-task: retries, timeout, last-success marker, dead-letter handling
+- cron is the fallback when orchestrator is unavailable
+
+#### P5.2: KMM health artifacts
+
+- add scripts/kmm_health_check.py:
+  - last knowledge discovery timestamp
+  - last sync timestamp and status
+  - note count by domain
+  - book cache index freshness
+  - ingestion success/failure rate (last 24h)
+  - retrieval hit distribution (by layer)
+- output: $AGENT_HOME/knowledge/kmm-health.json
+- sidecar lert_queue.py can consume this health artifact
+
+#### P5.3: Observability cross-integration
+
+- KMM emits kmm-health.json into shared agent health directory
+- sidecar lert_queue.py picks up KMM health artifacts
+- sidecar metrics_dashboard.py adds KMM panel
+- sidecar slo_rollup.py includes KMM metrics
+
+#### P5.4: MCP server for KMM
+
+- add src/mcp_server.py with MCP tools:
+  - kmm_collect_web(url) → note_id, knowledge_object
+  - kmm_search(query, layers) → fused results with provenance
+  - kmm_discover(days) → new note list
+  - kmm_sync_status() → cloud sync freshness
+  - kmm_analyze(text, source_type) → knowledge object
+- KMM_MCP_ENABLED=1 activates MCP mode
+- MCP server binds to configurable port, 127.0.0.1 by default
+- supports stdio transport for direct agent integration
+
+#### P5.5: Agent capability discovery
+
+- add capability.yaml at KMM root:
+  `yaml
+  kmm:
+    version: 0.1.0
+    capabilities:
+      - id: kmm.collect.web
+        description: Collect web page content into structured notes
+        input: {url: string}
+        output: {note_id: string, knowledge_path: string}
+      - id: kmm.search
+        description: Multi-layer fused knowledge search
+        input: {query: string, layers: [string]}
+        output: {results: [{source, title, score, provenance}]}
+  `
+- sidecar reads capability.yaml for automatic tool registration
+- agents can discover KMM capabilities without prior knowledge of script paths
+
+---
+
+## Tier C: Optimization Targets
+
+### C1. Performance
+
+| Item | Current | Target | Approach |
+|------|---------|--------|----------|
+| Recall latency (cold) | ~15s (Hindsight timeout) | <5s | parallel + timeout + cache |
+| Recall latency (warm) | ~2s | <500ms | query cache by governance signature |
+| Ingestion throughput | single-threaded | N workers | ThreadPoolExecutor for batch collect |
+| Knowledge-object dedup | none | content-hash fingerprint | SHA256(title+source_ref+content) |
+| Book cache rebuild | full rescan | incremental | signature-gated as in knowledge_notes.py |
+
+### C2. Test Coverage
+
+| Item | Current | Target |
+|------|---------|--------|
+| Total tests | 40 | 60+ |
+| Fresh install test | none | test_fresh_install.py |
+| Upgrade test | none | test_upgrade.py |
+| Uninstall safety test | assertion-only | test_uninstall.py |
+| Sync behavior test | e2e smoke only | test_sync_behavior.py (dry-run, conflict, retry) |
+| Recall quality regression | none | test_retrieval_quality.py with fixtures |
+| Knowledge JSON validation | implicit | pytest schema compliance check |
+| Chinese-language fixtures | none | zh + en + mixed test fixtures for analysis and retrieval |
+
+### C3. Security & Privacy
+
+| Item | Current | Target |
+|------|---------|--------|
+| Sensitive scan in CI | yes (ci.yml runs sensitive_scan.py) | keep |
+| Knowledge JSON path leak scan | none | add path-pattern check to sensitive_scan.py |
+| Installer does not write server paths | verified | add regression test |
+| Recall output sanitization | basic ([:400] truncation) | strip paths matching AGENT_HOME from recall output |
+| Credential injection | env-only | verify no hardcoded creds in CI check |
+
+### C4. Documentation
+
+| Item | Current | Target |
+|------|---------|--------|
+| README vs code match | partial (claims broader than repo-backed) | README describes only repository-backed features |
+| API reference | README tables only | add docs/api-reference.md with per-function doc |
+| Schema doc | inline in analysis.py | add docs/knowledge-object-schema.md |
+| Channel adapter guide | none | add docs/channel-adapters.md |
+| Video pipeline guide | collection-pipeline.md only | add docs/video-pipeline.md |
+
+### C5. Release Engineering
+
+| Item | Current | Target |
+|------|---------|--------|
+| CI workflow | basic test + scan | add fresh-install, upgrade, schema-validation jobs |
+| Release version | 0.1.0 (src/__init__.py) mismatched with 0.0.2 (GitHub release) | unify to single version source |
+| Changelog | GitHub release notes only | add CHANGELOG.md following Keep a Changelog |
+| Release checklist | present (docs/RELEASE_CHECKLIST.md) | keep updated per release |
+| Gray rollout | documented | automate gray-validation suite run |
+
+---
+
+## Implementation Sequence
+
+The recommended build order respects dependencies between tiers:
+
+`
+Phase 1 (Week 1-2): Carry-Over + P0
+  A1 → A2 → A3 → P0.2 → P0.1 → P0.3 → P0.4 → P0.5
+
+Phase 2 (Week 3-4): P1 Document Ingestion
+  P1.1 → P1.2 → P1.3 → P1.4 → P1.5
+
+Phase 3 (Week 5-6): A4 + A5 + A6 (Sidecar Integration)
+  A4 → A5 → A6
+
+Phase 4 (Week 7-8): P2 Retrieval
+  P2.1 → P2.2 → P2.3 → P2.4 → P2.5
+
+Phase 5 (Week 9-10): P3 Video
+  P3.1 → P3.2 → P3.3 → P3.4 → P3.5
+
+Phase 6 (Week 11-12): P4 Defended Channels
+  P4.1 → P4.4 → P4.2 → P4.3 → P4.5 → P4.6
+
+Phase 7 (Week 13-14): P5 Observability + MCP
+  P5.1 → P5.2 → P5.3 → P5.4 → P5.5
+
+Phase 8 (Ongoing): Optimization
+  C1 → C2 → C3 → C4 → C5 (parallel, continuous)
+`
+
+## Immediate Next Actions (Today/Tomorrow)
+
+1. **[ ]** Push remaining local fix commit to GitHub
+2. **[ ]** Fast-forward server repo to clean state
+3. **[ ]** Add .benchmarks/ to .gitignore (done 2026-06-30)
+4. **[ ]** Run full validation: pytest -q, python scripts/kmm_e2e_smoke.py, python scripts/sensitive_scan.py
+5. **[ ]** Begin Phase 1: audit server cron entries (A1)
+
+## Phase Gate Criteria
+
+Each phase is gated by the following before proceeding to the next:
+
+- All tests pass (pytest -q, kmm_e2e_smoke.py)
+- Sensitive scan passes (sensitive_scan.py)
+- Compile check passes (python -m compileall src scripts tests)
+- This document updated with implementation notes
+- GitHub and server in sync
+
