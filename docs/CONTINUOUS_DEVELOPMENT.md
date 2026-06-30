@@ -3634,3 +3634,129 @@ The project is ready for a **v0.2.0 release** — update the version string, tag
 
 Next development cycle should focus on operational quality (benchmarks, real-data validation) rather than feature expansion.
 
+
+## 2026-06-30 v0.2.0 Release - Final Session
+
+### What landed
+
+All five remaining items from the final analysis have been implemented.
+
+#### v0.2.0 Release
+
+Version unified across all files:
+- src/__init__.py: 0.2.0
+- src/knowledge_collector/__init__.py: 0.2.0
+- install.sh: VERSION="0.2.0"
+- plugin.yaml: version: "0.2.0"
+- capability.yaml: version: "0.2.0"
+- scripts/kmm_health_check.py: "0.2.0"
+- README.md: all version references updated
+
+#### LLM Extractor Hook
+
+New file: src/knowledge_collector/llm_analyzer.py
+
+LlmKnowledgeAnalyzer enriches the deterministic analyzer with LLM-powered extraction:
+- Providers: OpenAI GPT-4o-mini, DeepSeek Chat, Anthropic Claude 3.5 Haiku
+- Falls back to deterministic when no credentials configured
+- Merges LLM output with deterministic base: claims, concepts, actions, risks
+- Adds extractor: "llm/{provider}" provenance metadata
+- Adds quality.llm_score alongside deterministic quality.score
+- Temperature 0.1 for reproducibility
+
+Exported as analyze_material_llm() for direct use.
+
+#### Sidecar L3 Knowledge-Object Recall
+
+Modified: hermes-memory-installer/scripts/memory_governance_rebuild.py
+
+query_governance_knowledge() now searches knowledge_object_index_fts for concepts, claims, and actions alongside knowledge_note_index_fts:
+- Priority: note results first, then object results fill remaining slots
+- Object results require quality_score >= 0.3 threshold
+- Results include object_id and quality_score in output
+- Frame: "knowledge" layer, source: "knowledge-object:{title}"
+- Score: 0.82 + quality_score * 0.1 capped at 0.92
+- Graceful fallback on missing tables (try/except)
+
+#### Performance Benchmarks
+
+New file: tests/bench_kmm_performance.py
+
+| Benchmark | Result (server) | Unit |
+|-----------|----------------|------|
+| Recall warm p50 | 3009 | ms |
+| Ingestion throughput | 153.8 | notes/sec |
+| Ingestion per note | 6.5 | ms |
+| Query preprocessing | 10,060 | queries/sec |
+| Query preprocessing | 99.4 | us/query |
+| Knowledge analysis | 0.65 | ms/analysis |
+| Memory RSS | 46.1 | MB |
+
+Run: python3 tests/bench_kmm_performance.py
+
+#### Real-Data Pipeline Validation
+
+New file: tests/test_pipeline_validation.py (11 tests)
+
+Tests exercise full KMM pipeline on realistic Chinese and English content:
+- ZH article to note + knowledge JSON
+- EN tech doc to note + knowledge JSON
+- Analysis to relations extraction roundtrip
+- Query preprocess to rerank chain
+- Document routing validation
+- Schema migration identity
+- No-credentials translation fallback
+- LLM analyzer deterministic fallback
+- Engine registry verification
+- Scene detector graceful degradation
+
+### Validation
+
+```
+python -m compileall src scripts tests     passed
+python -m pytest -q                        83 passed
+python scripts/sensitive_scan.py           scan ok (76 files)
+python tests/bench_kmm_performance.py      benchmarks run
+python scripts/kmm_e2e_smoke.py            ok: true
+```
+
+### Complete Session History
+
+```
+Session 1: Baseline + Planning           (74977b9)
+Session 2: Tier A+C                      (4e6401d)
+Session 3: A1 Cron cutover               (129d75a)
+Session 4: P0-P5 expansion               (1a0ad6a)
+Session 5: A1-B3 expansion               (0f96103)
+Session 6: Gap closure                   (49bfe2e)
+Session 7: v0.2.0 release                (3e67b98)
+```
+
+### Final Project Stats
+
+| Metric | Baseline | v0.2.0 |
+|--------|----------|--------|
+| Python modules | 15 | 31 |
+| Channel adapters | 0 | 5 |
+| Tests | 40 | 83 |
+| Scanned files | 58 | 76 |
+| Commits | 3 | 16 |
+| Version | 0.1.0 | 0.2.0 |
+| Retrieval latency | N/A | 3s warm |
+| Ingestion throughput | N/A | 154 notes/s |
+| Memory footprint | N/A | 46 MB |
+
+### Project Status: COMPLETE
+
+All planned architecture layers are implemented, tested, documented, and deployed:
+- Acquisition (7 sources + 5 channels)
+- Analysis (deterministic + LLM optional + relations)
+- Rendering (Markdown + JSON sidecar + translation)
+- Retrieval (4-layer parallel + hybrid + rerank)
+- Sync (12+ cloud drivers)
+- Observability (health + benchmarks + scanning)
+- Integration (sidecar indexing + L3 recall + MCP)
+- Production (installed + cron + CI + versioned)
+
+The project is feature-complete for its current architecture phase.
+Next cycle: operational quality metrics and real-world data pipeline optimization.
