@@ -63,7 +63,7 @@ class NoteGenerator:
         rendered_content = render_knowledge_note(knowledge)
         note_id = stable_note_id(title, rendered_content)
         notes_root = resolve_notes_root()
-        dedup_result = _find_existing_note(notes_root, note_id, content)
+        dedup_result = _find_existing_note(notes_root, note_id, knowledge)
         if dedup_result:
             return dedup_result
 
@@ -106,21 +106,24 @@ class NoteGenerator:
 def generate_note(material, template="article", note_title=None):
     return NoteGenerator().generate(material, source_type=template, note_title=note_title)
 
-def _find_existing_note(notes_root: Path, note_id: str, content: str) -> dict[str, str] | None:
-    """Return existing note if content-hash matches, else None."""
-    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+def _find_existing_note(notes_root: Path, note_id: str, knowledge: dict) -> dict[str, str] | None:
+    """Return existing note if note_id already exists and knowledge matches."""
     for md_path in sorted(notes_root.rglob(f"{note_id}.md")):
-        existing = md_path.read_text(encoding="utf-8", errors="replace")
-        if hashlib.sha256(existing.encode("utf-8")).hexdigest() == content_hash:
-            knowledge_path = md_path.with_suffix(".knowledge.json")
-            return {
-                "note_id": note_id,
-                "note_path": str(md_path),
-                "knowledge_path": str(knowledge_path),
-                "domain": md_path.parent.parent.name if md_path.parent.parent.resolve() != notes_root.resolve() else "personal",
-                "title": note_id,
-                "analysis": json.loads(knowledge_path.read_text(encoding="utf-8")) if knowledge_path.exists() else {},
-                "dedup": True,
-            }
+        knowledge_path = md_path.with_suffix(".knowledge.json")
+        if knowledge_path.exists():
+            try:
+                existing_ko = json.loads(knowledge_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if existing_ko.get("object_id") == knowledge.get("object_id"):
+                return {
+                    "note_id": note_id,
+                    "note_path": str(md_path),
+                    "knowledge_path": str(knowledge_path),
+                    "domain": md_path.parent.parent.name if md_path.parent.parent.resolve() != notes_root.resolve() else "personal",
+                    "title": knowledge.get("title", note_id),
+                    "analysis": existing_ko,
+                    "dedup": True,
+                }
     return None
 

@@ -16,3 +16,5 @@ onedrive_bidirectional_sync.sh
 recall_shadow_compare.py
 sensenova_dispatcher.py
 verify_plugin.sh
+sensitive_scan.py
+kmm_health_check.py

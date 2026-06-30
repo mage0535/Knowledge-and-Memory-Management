@@ -22,6 +22,16 @@ from .document import (
 from .note_generator import generate_note
 from .video import collect_video
 from .web import collect_web
+from .query_rewrite import preprocess_query, expand_query, detect_language, extract_entities
+from .channels import (
+    ChannelAdapter,
+    ChannelContent,
+    CHANNEL_REGISTRY,
+    collect_from_channel,
+    list_supported_platforms,
+)
+from .video_adapter import VideoAdapter, VideoContent, VideoMetadata, resolve_video_adapter
+from .analysis import migrate_knowledge_object, SCHEMA_VERSIONS
 
 # 工具全集索引
 TOOL_INVENTORY = {
@@ -57,6 +67,10 @@ TOOL_INVENTORY = {
         "title": "采集编排与调度",
         "description": "多源并行采集、去重、避撞",
     },
+    "channels": {
+        "title": "渠道适配",
+        "description": "多平台内容采集适配器 (WeChat, HN, Reddit, etc.)",
+    },
 }
 
 
@@ -86,4 +100,19 @@ __all__ = [
     "generate_note",
     "on_collect",
     "render_knowledge_note",
+    "migrate_knowledge_object",
+    "SCHEMA_VERSIONS",
+    "preprocess_query",
+    "expand_query",
+    "detect_language",
+    "extract_entities",
+    "ChannelAdapter",
+    "ChannelContent",
+    "CHANNEL_REGISTRY",
+    "collect_from_channel",
+    "list_supported_platforms",
+    "VideoAdapter",
+    "VideoContent",
+    "VideoMetadata",
+    "resolve_video_adapter",
 ]

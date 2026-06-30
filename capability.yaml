@@ -1,0 +1,106 @@
+# KMM Capability Manifest
+kmm:
+  version: "0.1.0"
+  capabilities:
+    - id: kmm.collect.web
+      description: "Collect web page content into structured notes with knowledge objects"
+      input:
+        url: string
+      output:
+        note_id: string
+        knowledge_path: string
+
+    - id: kmm.collect.video
+      description: "Create structured capture notes from video URLs (YouTube, Bilibili, etc.)"
+      input:
+        url: string
+      output:
+        note_path: string
+        metadata.video_id: string
+
+    - id: kmm.collect.article
+      description: "Collect article content by platform source and keyword or URL"
+      input:
+        source: string
+        keyword: string
+      output:
+        note_path: string
+        source_type: string
+
+    - id: kmm.collect.document
+      description: "Convert documents (PDF, DOCX, MD, etc.) via MarkItDown and generate notes"
+      input:
+        path: string
+      output:
+        note_path: string
+
+    - id: kmm.collect.book
+      description: "Trigger book-to-skill refinement pipeline for PDF/EPUB files"
+      input:
+        path: string
+      output:
+        book_to_skill_output: dict
+
+    - id: kmm.analyze.material
+      description: "Deterministic knowledge analysis — extract concepts, claims, actions, risks"
+      input:
+        text: string
+        title: string
+        source_type: string
+      output:
+        knowledge_object: "kmm.knowledge_object.v1"
+
+    - id: kmm.note.generate
+      description: "Generate structured Markdown note plus machine-readable knowledge JSON sidecar"
+      input:
+        title: string
+        content: string
+        domain: string
+      output:
+        note_id: string
+        note_path: string
+        knowledge_path: string
+
+    - id: kmm.search
+      description: "Multi-layer fused knowledge search (local + FTS5 + Hindsight + gbrain)"
+      input:
+        query: string
+        domains: list[string]
+      output:
+        results:
+          - source: string
+            title: string
+            score: number
+            url: string
+
+    - id: kmm.search.augmented
+      description: "Local-first search with AnySearch vertical domain web fallback"
+      input:
+        query: string
+        domain: string
+      output:
+        source: "local | web | hybrid"
+        results: list
+
+    - id: kmm.sync.cloud
+      description: "List configured cloud drives and sync notes"
+      input:
+        command: "list | sync_to | sync_from"
+      output:
+        drives: list[string]
+
+    - id: kmm.health
+      description: "Get KMM health status: note counts, sync state, service availability"
+      input: {}
+      output:
+        notes.total: number
+        services.gbrain: boolean
+        services.hindsight: boolean
+
+    - id: kmm.migrate
+      description: "Migrate knowledge objects between schema versions"
+      input:
+        obj: dict
+        target_version: string
+      output:
+        migrated_object: dict

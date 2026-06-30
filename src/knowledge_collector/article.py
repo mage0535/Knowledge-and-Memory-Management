@@ -171,6 +171,40 @@ class ArticleCollector:
     }
 
     def collect(self, source: str, keyword: str) -> CollectionResult:
+        # Route to channel adapter if registered
+        if source in ("hackernews", "wechat", "reddit", "csdn", "xiaohongshu"):
+            try:
+                from .channels import collect_from_channel
+                channel_content = collect_from_channel(source, keyword)
+                if channel_content and channel_content.content_blocks:
+                    note = generate_note(
+                        {
+                            "title": channel_content.title,
+                            "content": "\n\n".join(
+                                b.get("text", "") for b in channel_content.content_blocks
+                            ),
+                            "source_type": "article",
+                            "source_ref": channel_content.source_url,
+                            "metadata": {
+                                "source": source,
+                                "platform": channel_content.source_platform,
+                                "author": channel_content.author,
+                                "published_at": channel_content.published_at,
+                            },
+                        },
+                        template="article",
+                    )
+                    return CollectionResult(
+                        source_type="article",
+                        title=channel_content.title,
+                        content_preview=channel_content.content_blocks[0].get("text", "")[:500] if channel_content.content_blocks else "",
+                        note_path=note["note_path"],
+                        gbrain_slug=note["note_id"],
+                        metadata={"source": source, "platform": channel_content.source_platform},
+                    )
+            except ImportError:
+                pass
+
         if keyword.startswith("http://") or keyword.startswith("https://"):
             result = collect_web(keyword, strategy="auto")
             result.source_type = "article"

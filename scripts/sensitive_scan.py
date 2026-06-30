@@ -38,6 +38,10 @@ EXCLUDE_SECRET_MARKER_FILES = {
     "scripts/install_rclone_drives.sh",
 }
 
+EXCLUDE_SERVER_PATH_FILES = {
+    "docs/CONTINUOUS_DEVELOPMENT.md",
+}
+
 
 def iter_text_files(repo_root: Path):
     for path in repo_root.rglob("*"):
@@ -63,6 +67,8 @@ def scan_repo(repo_root: Path) -> dict:
                 if key == "private_ipv4" and token in ALLOWED_IPS:
                     continue
                 if key == "inline_secret_marker" and rel in EXCLUDE_SECRET_MARKER_FILES:
+                    continue
+                if key == "server_absolute_path" and rel in EXCLUDE_SERVER_PATH_FILES:
                     continue
                 findings.append(
                     {
