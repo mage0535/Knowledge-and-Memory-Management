@@ -2757,3 +2757,326 @@ source adapter → normalized ContentBlock → knowledge object → note renderi
 
 Every new feature should emit the same pipeline. No new source should create its own downstream format. This keeps KMM coherent as it grows.
 
+
+## 2026-06-30 P0-P5 Expansion Implementation
+
+### Session overview
+
+P0 through P5 items from the next-phase plan were implemented in a single autonomous session. 10 new files created, 5 existing files modified. Tests grew from 40 to 62.
+
+---
+
+### P0: Production Hardening
+
+#### P0.3: Fresh-install validation (test_fresh_install.py)
+
+- 	est_fresh_install_deploys_all_managed_scripts: runs install.sh in temp AGENT_HOME, verifies every script from managed_scripts.txt is deployed, checks plugin dir and knowledge dir.
+- 	est_install_manifest_created: verifies kmm-install-manifest.txt is written with commit hash and timestamp.
+
+#### P0.4: Upgrade validation (test_upgrade.py)
+
+- 	est_upgrade_preserves_existing_notes: creates a note before install, runs install.sh, verifies the note still exists after upgrade.
+
+#### P0.5: Uninstall safety (test_uninstall.py)
+
+- 	est_uninstall_removes_scripts_preserves_data: runs install then uninstall, verifies note data is preserved.
+- 	est_uninstall_script_contains_data_preservation_message: asserts the uninstall script explicitly mentions data preservation.
+
+---
+
+### P1: Document Ingestion
+
+#### P1.1-P1.5: Managed script inventory
+
+- configs/managed_scripts.txt now includes sensitive_scan.py and kmm_health_check.py (20 total).
+- Article collector now routes channel sources through the channel adapter framework when a matching adapter is registered.
+
+---
+
+### P2: Retrieval Quality
+
+#### P2.1: Query preprocessing module (query_rewrite.py)
+
+New file at src/knowledge_collector/query_rewrite.py:
+
+`
+detect_language(query)          → zh | en | unknown (CJK ratio heuristic)
+expand_query(query, n)          → original + synonym-expanded variants
+extract_entities(query)         → URL, file_path, version, date, email patterns
+preprocess_query(query)         → full structured preprocessing output
+`
+
+- SYNONYM_MAP_EN: 18 keyword groups (memory, retrieval, search, graph, sync, etc.)
+- SYNONYM_MAP_ZH: 11 Chinese keyword groups for zh-language queries
+- Deterministic default; optional LLM enrichment via KMM_QUERY_LLM_PROVIDER in future
+
+#### P2.5: Retrieval evaluation fixtures (test_retrieval_quality.py)
+
+- 	est_query_language_detection_en/zh/unknown
+- 	est_expand_query_en/zh
+- 	est_extract_entities_url/version
+- 	est_preprocess_query_returns_structured_output
+- 	est_migrate_knowledge_object_identity
+- 	est_migrate_knowledge_object_unknown_path
+- 	est_generate_note_dedup
+- 	est_channel_adapter_registry
+- 	est_hackernews_adapter_can_handle
+- 	est_wechat_adapter_can_handle
+- 	est_video_adapter_registry
+- 	est_sensitive_scan_knowledge_json_scan
+- 	est_sensitive_scan_clean_json_passes
+
+---
+
+### P3: Video Pipeline
+
+#### P3.1: Video adapter framework (video_adapter.py)
+
+New file at src/knowledge_collector/video_adapter.py:
+
+`
+VideoAdapter (ABC)
+  ├── can_handle(url)         → bool
+  ├── fetch_metadata(url)     → VideoMetadata
+  ├── fetch_subtitles(id)     → list[dict]
+  └── collect(url)            → VideoContent
+
+VideoContent
+  ├── metadata: VideoMetadata
+  ├── subtitles: list[dict]
+  ├── transcript: str
+  ├── timeline_blocks: list[VideoTimeline]
+  └── keyframes: list[str]
+
+resolve_video_adapter(url) → VideoAdapter | None
+`
+
+Framework ready for YouTube/Bilibili/TikTok/Douyin adapter implementations.
+
+---
+
+### P4: Defended-Channel Ingestion
+
+#### P4.6: Channel adapter registry (channels/__init__.py)
+
+`
+ChannelAdapter (ABC)
+  ├── platform: str
+  ├── can_handle(url_or_id)   → bool
+  ├── fetch(url_or_id)        → ChannelContent
+  └── normalize(content)      → list[ContentBlock]
+
+CHANNEL_REGISTRY: dict[str, ChannelAdapter]
+register_adapter(adapter)
+resolve_adapter(platform)     → ChannelAdapter | None
+collect_from_channel(platform, url_or_id) → ChannelContent | None
+list_supported_platforms()    → list[str]
+`
+
+#### P4.1: WeChat Official Account adapter (channels/wechat.py)
+
+- Parses mp.weixin.qq.com article pages via requests + BeautifulSoup
+- Extracts: title (#activity-name), author (#js_name), publish date, body (#js_content)
+- Captures image URLs as assets
+- Auto-detects language via CJK character ratio
+- Registers as platform= wechat
+
+#### P4.4: Hacker News adapter (channels/hackernews.py)
+
+- Uses official Firebase API (hacker-news.firebaseio.com/v0)
+- Handles both URL format and bare item ID
+- Fetches: story metadata, score, comment count, top 20 comments
+- Registers as platform=hackernews
+- Comment text truncated to 240 chars for note rendering
+
+#### Article collector routing
+
+rticle.py collect() now auto-routes to channel adapter when source matches hackernews / wechat / eddit / csdn / xiaohongshu, falling back to web collection or keyword search mode.
+
+---
+
+### P5: Observability & MCP
+
+#### P5.2: Health check (kmm_health_check.py)
+
+New script at scripts/kmm_health_check.py:
+
+- Counts total notes and knowledge JSON objects
+- Breaks down note count by domain (personal/shared/archive)
+- Checks gbrain (port 8787) and Hindsight (port 8890) availability
+- Reads install manifest for version tracking
+- Checks last sync log modification time
+- Outputs: $AGENT_HOME/knowledge/kmm-health.json
+
+#### P5.4: MCP server (mcp_server.py)
+
+New file at src/mcp_server.py:
+
+Supports stdio transport (KMM_MCP_TRANSPORT=stdio):
+
+| Tool | Input | Output |
+|------|-------|--------|
+| kmm_collect_web | url | note_path, title, source_type |
+| kmm_search | query, domains | fused results with query preprocessing |
+| kmm_analyze | text, title, source_type | knowledge object (v1 schema) |
+| kmm_health | — | note counts, service status, sync freshness |
+| kmm_list_drives | — | configured rclone remotes |
+
+#### P5.5: Agent capability manifest (capability.yaml)
+
+New manifest at repo root:
+
+- 11 capability entries covering: collect (web/video/article/document/book), analyze, note.generate, search, search.augmented, sync.cloud, health, migrate
+- Each entry includes: id, description, input schema, output schema
+- Enables agent auto-discovery without prior knowledge of KMM script paths
+
+---
+
+### Bug fixes
+
+#### C1: Knowledge-object dedup fix
+
+- Changed from SHA256(content) comparison (brittle, raw vs rendered mismatch) to object_id comparison
+- _find_existing_note now looks up the knowledge JSON sidecar and compares object_id fields
+- Dedup now reliably returns existing notes when the same source is collected twice
+
+#### C3: Sensitive scan false-positive fixes
+
+- Added EXCLUDE_SERVER_PATH_FILES for docs/CONTINUOUS_DEVELOPMENT.md (development journal legitimately documents server paths)
+- Added EXCLUDE_SECRET_MARKER_FILES filter in scan_repo loop
+- Self-exclusion of sensitive_scan.py from findings
+- 4.10.0.84 (opencv-python version) in ALLOWED_IPS
+
+---
+
+### Validation
+
+`
+python -m compileall src scripts tests     → passed
+python -m pytest -q                        → 62 passed
+python scripts/kmm_e2e_smoke.py            → ok: true
+python scripts/sensitive_scan.py           → scan ok (66 files)
+`
+
+### Server state
+
+- Installed to /root/.hermes/ (knowledge-plugin + scripts)
+- Cron: 2 KMM entries active (nightly 2AM + discovery Sunday 4AM)
+- Git: clean, remote matches GitHub
+
+### Commit chain
+
+`
+1a0ad6a ← feat: P0-P5 expansion (this session)
+249eb75 ← docs: session completion summary
+129d75a ← docs: record A1 cron cutover
+4e6401d ← feat: Tier A+C improvements
+8472205 ← docs: next-phase full planning
+74977b9 ← baseline
+`
+
+---
+
+## Next-Direction Analysis
+
+### Current maturity map
+
+`
+Layer                    v0.1.0 Status        Next Target
+─────────────────────    ────────────────      ──────────────────────────
+Acquisition              ✅ web/article/doc     🟡 Docling/MinerU engines
+                         ✅ book refinement     🟡 batch ingestion CLI
+                         ✅ channel adapters    🟡 XHS/Reddit/CSDN adapters
+                         🟡 video (basic)       🔲 PySceneDetect + PaddleOCR
+
+Analysis                 ✅ deterministic v1    🟡 LLM extractor hook
+                         ✅ keyword+concept     🟡 relation extraction
+                         ✅ claim+risk+timeline 🔲 multi-language NLU
+
+Rendering                ✅ article/note tmpl   🟡 timeline media notes
+                         ✅ JSON sidecar        🟡 image-sequence notes
+                         🟡 video template
+
+Retrieval                ✅ 4-layer parallel    🟡 hybrid (FTS + vector)
+                         ✅ query preprocessing 🔲 reranker
+                         ✅ channel search      🔲 provenance scoring
+
+Sync                     ✅ rclone 12+          🟡 bisync in production
+                         ✅ cron active         🟡 health-driven sync trigger
+
+Observability            ✅ kmm-health.json     🔲 sidecar alert integration
+                         ✅ capability manifest 🔲 metrics dashboard
+                         ✅ MCP stdio server    🔲 HTTP MCP transport
+
+Production               ✅ 62 tests            🔲 perf benchmarks
+                         ✅ install/uninstall   🔲 regression capture
+                         ✅ sensitive scan      🔲 automated CRLF→LF in CI
+
+Integration              ✅ knowledge JSON      🔲 sidecar object indexing
+                         ✅ AGENT_HOME contract 🔲 typed protocol contract
+                         ✅ shared state.db     🔲 GraphRAG edge extraction
+`
+
+✅ = complete | 🟡 = basic, needs depth | 🔲 = not started
+
+### Weighted next priorities
+
+#### Priority A (highest ROI, 1-2 sessions each)
+
+**A1. Sidecar knowledge-object indexing**
+KMM now produces *.knowledge.json reliably (dedup tested). The memory sidecar indexes Markdown notes but not knowledge objects. Closing this gap would make facts, concepts, claims, action items, and risks searchable in tiered recall.
+
+Impact: unlocks the entire knowledge-object pipeline that KMM was designed for.
+Effort: ~3 hours (changes in hermes-memory-installer side).
+
+**A2. Hybrid retrieval (P2.2)**
+Query preprocessing (P2.1) is done. The next step is fusing lexical FTS5 with vector search. Qdrant is already in the hermes-memory-installer stack.
+
+Impact: semantic search + keyword search = measurable recall improvement.
+Effort: ~4 hours.
+
+**A3. Video pipeline completion (P3.2-P3.5)**
+The adapter framework (P3.1) is ready. Next: PySceneDetect keyframe extraction, PaddleOCR frame text, timeline chunking, and mixed-media note rendering.
+
+Impact: video notes go from capture placeholder to rich timeline with screenshots and OCR.
+Effort: ~6 hours, mostly dependency integration.
+
+#### Priority B (medium ROI, 2-3 sessions each)
+
+**B1. Reranker (P2.3)**
+Jina AI or Cohere reranker integration. Query preprocessing + hybrid search + reranker = production-quality retrieval.
+
+**B2. Docling/MinerU engines (P1.2-P1.3)**
+Optional document engines for layout-aware and OCR-heavy documents. Add as scored fallback in doc_parse_router.
+
+**B3. Batch ingestion CLI (P1.5)**
+python3 -m knowledge_collector.document --batch ./input/ --recurse --format pdf,docx
+
+#### Priority C (longer-term, 3-5 sessions)
+
+**C1. LLM extractor hook (A5)**
+Optional LLM-powered knowledge extraction alongside deterministic analyzer. Same schema, richer output.
+
+**C2. Remaining channel adapters (P4.2-P4.3-P4.5)**
+Xiaohongshu image-first OCR pipeline, Reddit structured thread ingestion, CSDN article adapter.
+
+**C3. MCP HTTP transport + metrics dashboard (P5.3-P5.4-ext)**
+Production MCP server with HTTP transport, KMM metrics in sidecar dashboard.
+
+### Architectural principle (unchanged)
+
+All new features must follow the shared pipeline:
+
+`
+source adapter → normalized ContentBlock → knowledge object → note rendering
+                                                             → sidecar indexing
+                                                             → retrieval
+                                                             → sync
+`
+
+### Immediate next actions (next session)
+
+1. Sidecar knowledge_object_index table + indexing (highest integration value)
+2. P2.2 hybrid search with Qdrant
+3. P3.2-P3.5 video pipeline PySceneDetect + PaddleOCR integration
+
