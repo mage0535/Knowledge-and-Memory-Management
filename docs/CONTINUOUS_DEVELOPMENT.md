@@ -1734,6 +1734,28 @@ Result:
 
 The remaining warning is the existing `speech_recognition` / `aifc` deprecation warning from the document conversion dependency path, not a KMM analysis-layer failure.
 
+Additional server-runtime hardening was added after installed smoke testing:
+
+- `scripts/doc_parse_router.py` now treats missing optional parser commands as a recoverable fallback condition.
+- Markdown, text, JSON, CSV, XML, and HTML-like files now have a direct plaintext fallback.
+- A regression test covers the missing-command fallback path.
+
+Updated local validation after the router hardening:
+
+```text
+pytest -q
+python scripts/kmm_e2e_smoke.py
+python scripts/sensitive_scan.py
+```
+
+Result:
+
+```text
+40 passed, 1 warning
+kmm_e2e_smoke.py ok: true
+scan ok
+```
+
 ### Why this satisfies the current design goal
 
 Before this change, KMM could collect content and render notes, but the "knowledge" inside those notes existed mostly as human-readable Markdown.

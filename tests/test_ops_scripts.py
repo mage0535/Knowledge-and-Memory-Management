@@ -12,6 +12,7 @@ import gbrain_compact
 import gbrain_link_orphans
 import gray_validation_suite
 import knowledge_analysis
+import doc_parse_router
 import recall_shadow_compare
 import sensitive_scan
 import sensenova_dispatcher
@@ -83,6 +84,19 @@ def test_knowledge_analysis_cli_outputs_schema(monkeypatch, capsys):
     assert knowledge_analysis.main() == 0
     output = capsys.readouterr().out
     assert '"schema_version": "kmm.knowledge_object.v1"' in output
+
+
+def test_doc_parse_router_falls_back_when_commands_missing(monkeypatch, tmp_path: Path):
+    source = tmp_path / "sample.md"
+    source.write_text("# Sample\n\nPlaintext fallback.\n", encoding="utf-8")
+    monkeypatch.setattr(doc_parse_router, "MARKITDOWN_BIN", str(tmp_path / "missing-markitdown"))
+    monkeypatch.setattr(doc_parse_router, "LITEPARSE_BIN", str(tmp_path / "missing-liteparse"))
+
+    result = doc_parse_router.parse_document(str(source))
+
+    assert result["ok"] is True
+    assert result["engine"] == "plaintext"
+    assert "Plaintext fallback" in result["text"]
 
 
 def test_recall_shadow_compare_summarizes_layer_counts(monkeypatch):

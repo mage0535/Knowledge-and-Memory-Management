@@ -17,7 +17,10 @@ PDFTOTEXT_BIN = os.environ.get("PDFTOTEXT_BIN", "pdftotext")
 
 
 def run(cmd: list[str]) -> tuple[int, str, str]:
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        return 127, "", f"command not found: {exc.filename}"
     return result.returncode, result.stdout, result.stderr
 
 
@@ -42,12 +45,22 @@ def parse_with_pdftotext(src: str) -> dict:
     return {"engine": "pdftotext", "ok": False, "error": err.strip() or "no output"}
 
 
+def parse_with_plaintext(src: str) -> dict:
+    ext = Path(src).suffix.lower()
+    if ext not in {".txt", ".md", ".markdown", ".json", ".csv", ".xml", ".html", ".htm"}:
+        return {"engine": "plaintext", "ok": False, "error": f"unsupported plaintext fallback: {ext}"}
+    text = Path(src).read_text(encoding="utf-8", errors="replace")
+    if text.strip():
+        return {"engine": "plaintext", "ok": True, "text": text}
+    return {"engine": "plaintext", "ok": False, "error": "no output"}
+
+
 def parse_document(src: str) -> dict:
     ext = Path(src).suffix.lower()
     if ext == ".pdf":
         candidates = [parse_with_liteparse, parse_with_markitdown, parse_with_pdftotext]
     else:
-        candidates = [parse_with_markitdown, parse_with_liteparse]
+        candidates = [parse_with_markitdown, parse_with_liteparse, parse_with_plaintext]
 
     attempts = []
     for parser in candidates:
