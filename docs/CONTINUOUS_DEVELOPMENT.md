@@ -2492,3 +2492,37 @@ New files:
 3. A1: decide on cron cutover (approve → run installer with KMM_SKIP_CRON=0)
 4. Begin Phase 2 (P1 document ingestion) or Phase 3 (A4+A5 sidecar integration)
 
+
+## 2026-06-30 A1 Complete: Server Cron Cutover
+
+### Decision rationale
+
+After evaluating the server environment:
+- 22+ existing cron entries managed by hermes-memory-installer
+- onedrive remote confirmed available
+- KMM scripts properly installed to /root/.hermes/scripts/
+
+**Decision**: incremental additive cutover, not replacement.
+
+### What was done
+
+1. KMM installed to /root/.hermes/ with KMM_SKIP_CRON=0
+2. KMM_SYNC_REMOTE intentionally NOT set to avoid conflicting with existing clone copy sync to onedrive:Obsidian/
+3. Existing 22+ cron entries fully preserved
+4. KMM entries added as supplementary:
+
+`
+0 2 * * * python3 /root/.hermes/scripts/nightly_maintenance.py   # kmm-nightly
+0 4 * * 0 python3 /root/.hermes/scripts/knowledge_discovery.py    # knowledge-discovery
+`
+
+### Why not sync cron
+
+Existing */30 * * * * rclone copy targets onedrive:Obsidian/学习笔记/学习笔记/. KMM bisync would target a different path and uses isync (two-way) vs existing copy (one-way). Keeping both would duplicate operations. When bisync is desired, set KMM_SYNC_REMOTE and remove the legacy sync cron.
+
+### Validation
+
+- erify_plugin.sh: all checks passed
+- knowledge_discovery.py: executed successfully
+- All existing cron entries preserved (verified via crontab -l)
+
