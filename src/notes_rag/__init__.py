@@ -19,6 +19,7 @@ import subprocess
 from cloud_sync import CloudSyncEngine
 from runtime_support import resolve_agent_home, resolve_notes_root
 from knowledge_collector.note_generator import generate_note
+from knowledge_collector.query_rewrite import preprocess_query
 
 class NotesRAGManager:
     """笔记与 RAG 管理器"""
@@ -44,6 +45,8 @@ class NotesRAGManager:
     
     def search(self, query, domains=None):
         """跨域检索笔记，融合本地笔记、state.db 和可选外部记忆层。"""
+        qinfo = preprocess_query(query)
+
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = [
                 executor.submit(self._search_local_markdown, query, domains),
@@ -62,6 +65,19 @@ class NotesRAGManager:
                 seen.add(key)
                 fused.append(row)
         fused.sort(key=lambda item: item.get("score", 0.0), reverse=True)
+
+        try:
+            from knowledge_collector.hybrid_search import hybrid_search
+            fused = hybrid_search(fused, query, limit=max(len(fused), 10))
+        except ImportError:
+            pass
+
+        try:
+            from knowledge_collector.reranker import rerank
+            fused[:20] = rerank(query, fused[:20])
+        except ImportError:
+            pass
+
         return fused
 
     def _search_local_markdown(self, query, domains=None):

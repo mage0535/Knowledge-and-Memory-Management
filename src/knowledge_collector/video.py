@@ -1,201 +1,177 @@
-"""
-视频采集 — 全工具清单
+"""Enhanced video collection with subtitle extraction and batch processing.
 
-从抖音、YouTube、社交平台及通用视频源中提取画面和声音内容。
+Uses yt-dlp for metadata and subtitle/transcript extraction.
 """
 
 from __future__ import annotations
 
-from urllib.parse import parse_qs, urlparse
+from dataclasses import asdict
+import json
+import subprocess
+import sys
+from pathlib import Path
 
 from runtime_support import CollectionResult
 from .note_generator import generate_note
 
-class VideoCollector:
-    """视频知识采集 — 8 种引擎/工具"""
 
-    ENGINES = {
-        # ─── 专用视频采集脚本 ───
-        "douyin_video_intake": {
-            "type": "script",
-            "level": "⭐⭐⭐⭐⭐",
-            "description": "抖音视频元数据+字幕+ASR采集 — 通过浏览器态或Cookie获取",
-            "script": "scripts/douyin_video_intake.py",
-            "features": [
-                "视频元数据提取（标题/作者/播放量/点赞/评论）",
-                "字幕/弹幕提取",
-                "音频转写（Whisper ASR）",
-            ],
-            "status": "已部署 · 生产中",
-        },
-        "social_video_intake": {
-            "type": "script",
-            "level": "⭐⭐⭐⭐⭐",
-            "description": "通用社交媒体视频采集 — 统一入口",
-            "script": "scripts/social_video_intake.py",
-            "features": [
-                "多平台支持（抖音/TikTok/快手等）",
-                "元数据+字幕+ASR 全链路",
-                "登录态管理",
-            ],
-            "status": "已部署 · 生产中",
-        },
-        "universal_video_analyzer": {
-            "type": "skill",
-            "level": "⭐⭐⭐⭐⭐",
-            "description": "通用视频内容分析引擎 — 多语言OCR/人脸/质量/BGM/多渠道",
-            "skill": "universal-video-content-analyzer",
-            "features": [
-                "多语言语音识别 (Whisper)",
-                "画面 OCR (EasyOCR)",
-                "人脸检测",
-                "画质评估",
-                "BGM 识别",
-                "场景切分",
-                "情感分析",
-            ],
-            "status": "已部署 · 生产中",
-        },
+SUPPORTED_PLATFORMS = {
+    "youtube": {"domain": "youtube.com", "subtitle_langs": ["en", "zh-Hans", "ja", "ko"]},
+    "bilibili": {"domain": "bilibili.com", "subtitle_langs": ["zh-Hans", "en"]},
+    "tiktok": {"domain": "tiktok.com", "subtitle_langs": ["en"]},
+    "douyin": {"domain": "douyin.com", "subtitle_langs": ["zh-Hans"]},
+}
 
-        # ─── 基础视频工具 ───
-        "yt_dlp": {
-            "type": "cli",
-            "level": "⭐⭐⭐⭐",
-            "description": "通用视频/音频下载 — 支持YouTube/B站/抖音等数千网站",
-            "cli": "yt-dlp",
-            "features": [
-                "视频下载（MP4/WebM）",
-                "音频提取（MP3/WAV）",
-                "字幕下载",
-                "元数据获取",
-            ],
-            "status": "已部署",
-        },
-        "whisper_asr": {
-            "type": "engine",
-            "level": "⭐⭐⭐⭐",
-            "description": "OpenAI Whisper 语音识别 — 多语言，高精度",
-            "features": [
-                "99+ 语言支持",
-                "多模型大小（tiny/base/small/medium/large）",
-                "自动语言检测",
-                "时间戳对齐",
-            ],
-            "status": "已部署",
-        },
-        "easy_ocr": {
-            "type": "engine",
-            "level": "⭐⭐⭐",
-            "description": "EasyOCR — 视频关键帧画面文字提取",
-            "features": [
-                "80+ 语言支持",
-                "中英文高精度",
-                "GPU 加速可选",
-            ],
-            "status": "已部署",
-        },
-        "ffmpeg": {
-            "type": "cli",
-            "level": "⭐⭐⭐",
-            "description": "FFmpeg 多媒体处理 — 视频切分/转码/截图/音频提取",
-            "features": [
-                "视频/音频格式转换",
-                "关键帧提取",
-                "场景切分",
-                "片段剪辑",
-                "字幕烧录",
-            ],
-            "status": "已部署",
-        },
-        "tesseract_ocr": {
-            "type": "cli",
-            "level": "⭐⭐⭐",
-            "description": "Tesseract OCR — 开源文字识别，中文需chi_sim语言包",
-            "cli": "tesseract",
-            "features": [
-                "100+ 语言支持",
-                "中文简体/繁体",
-                "版面分析",
-            ],
-            "status": "已部署",
-        },
 
-        # ─── 平台分析 ───
-        "youtube_analytics": {
-            "type": "skill",
-            "level": "⭐⭐⭐⭐",
-            "description": "YouTube Data API v3 分析工具",
-            "skill": "youtube-analytics",
-            "features": [
-                "频道数据分析",
-                "视频统计",
-                "评论分析",
-                "趋势跟踪",
-            ],
-            "status": "已部署",
-        },
-        "douyin_daily_analysis": {
-            "type": "skill",
-            "level": "⭐⭐⭐⭐",
-            "description": "抖音每日自动化分析工作流",
-            "skill": "douyin-daily-analysis-workflow",
-            "features": [
-                "账号每日数据",
-                "视频表现分析",
-                "内容主题变化趋势",
-            ],
-            "status": "已部署",
-        },
-        "douyin_hot": {
-            "type": "skill",
-            "level": "⭐⭐⭐",
-            "description": "抖音热榜/热搜数据获取",
-            "skill": "douyin-hot",
-            "features": [
-                "热榜视频",
-                "挑战赛",
-                "音乐热点",
-                "多领域热门",
-            ],
-            "status": "已部署",
-        },
-    }
+def detect_platform(url: str) -> str:
+    for platform, info in SUPPORTED_PLATFORMS.items():
+        if info["domain"] in url:
+            return platform
+    return "generic"
 
-    def collect(self, url: str) -> CollectionResult:
-        parsed = urlparse(url)
-        host = parsed.netloc or "video"
-        video_id = parse_qs(parsed.query).get("v", [""])[0]
-        if not video_id and parsed.path:
-            video_id = parsed.path.strip("/").split("/")[-1]
-        title = f"Video capture from {host}"
-        body = (
-            f"URL: {url}\n"
-            f"Video ID: {video_id or 'unknown'}\n\n"
-            "Public KMM stores a structured capture note for this video URL. "
-            "Server-side OCR/ASR pipelines can enrich this note later."
+
+def extract_metadata(url: str) -> dict:
+    try:
+        result = subprocess.run(
+            ["yt-dlp", "--dump-json", "--no-playlist", url],
+            capture_output=True, text=True, timeout=30,
         )
-        note = generate_note(
-            {
-                "title": title,
-                "content": body,
-                "source_type": "video",
-                "source_ref": url,
-                "metadata": {"host": host, "video_id": video_id},
+        if result.returncode == 0:
+            return json.loads(result.stdout.strip())
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
+    return {"title": url, "id": _extract_id_from_url(url)}
+
+
+def _extract_id_from_url(url: str) -> str:
+    import re
+    match = re.search(r"[?&]v=([^&]+)", url)
+    if match:
+        return match.group(1)
+    match = re.search(r"/([^/]+?)(?:\?|$)", url)
+    if match:
+        return match.group(1)
+    return url
+    langs = languages or ["en", "zh-Hans"]
+    lang_flag = ",".join(langs)
+    try:
+        result = subprocess.run(
+            ["yt-dlp", "--write-sub", "--sub-lang", lang_flag,
+             "--skip-download", "--write-auto-sub",
+             "--sub-format", "vtt", "--output", "-",
+             "--print-to-file", "after_move:filepath",
+             url],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode != 0:
+            return []
+
+        import re
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".vtt", delete=False, mode="w") as f:
+            result = subprocess.run(
+                ["yt-dlp", "--write-auto-sub", "--sub-lang", lang_flag,
+                 "--skip-download", "-o", f"{f.name[:-4]}.%(ext)s", url],
+                capture_output=True, text=True, timeout=60,
+            )
+            vtt_path = f"{f.name[:-4]}.en.vtt"
+            if Path(vtt_path).exists():
+                text = Path(vtt_path).read_text(encoding="utf-8", errors="replace")
+                return _parse_vtt(text)
+
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return []
+
+
+def extract_subtitles(url: str, languages: list[str] | None = None) -> list[dict]:
+    langs = languages or ["en", "zh-Hans"]
+    try:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = subprocess.run(
+                ["yt-dlp", "--write-auto-sub", "--sub-lang", ",".join(langs),
+                 "--skip-download", "-o", f"{tmpdir}/%(title)s.%(ext)s", url],
+                capture_output=True, text=True, timeout=60,
+            )
+            for f in Path(tmpdir).rglob("*.vtt"):
+                text = f.read_text(encoding="utf-8", errors="replace")
+                return _parse_vtt(text)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return []
+
+
+def _parse_vtt(vtt_text: str) -> list[dict]:
+    import re
+    subtitles = []
+    lines = vtt_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if " --> " in line:
+            text_lines = []
+            i += 1
+            while i < len(lines) and lines[i].strip():
+                text_lines.append(lines[i].strip())
+                i += 1
+            if text_lines:
+                subtitles.append({"text": " ".join(text_lines)})
+        i += 1
+    return subtitles
+
+
+def enhanced_collect_video(url: str, extract_subtitles_flag: bool = True) -> CollectionResult:
+    metadata = extract_metadata(url)
+    platform = detect_platform(url)
+    video_id = metadata.get("id", url)
+    title = metadata.get("title") or f"video-{video_id}"
+
+    subtitles = []
+    if extract_subtitles_flag:
+        langs = SUPPORTED_PLATFORMS.get(platform, {}).get("subtitle_langs", ["en"])
+        subtitles = extract_subtitles(url, languages=langs)
+
+    transcript = "\n".join(sub.get("text", "") for sub in subtitles if isinstance(sub, dict))
+
+    body = f"Source: {url}\nPlatform: {platform}\nDuration: {metadata.get('duration', 'unknown')}\n"
+    if transcript:
+        body += f"\n--- Transcript ---\n{transcript[:4000]}\n"
+
+    note = generate_note(
+        {
+            "title": title,
+            "content": body,
+            "source_type": "video",
+            "source_ref": url,
+            "metadata": {
+                "platform": platform,
+                "video_id": video_id,
+                "duration": metadata.get("duration"),
+                "uploader": metadata.get("uploader", ""),
+                "subtitle_count": len(subtitles),
             },
-            template="video",
-        )
-        return CollectionResult(
-            source_type="video",
-            title=title,
-            content_preview=body[:500],
-            url=url,
-            note_path=note["note_path"],
-            gbrain_slug=note["note_id"],
-            metadata={"host": host, "video_id": video_id},
-            subtitles=[],
-            frames=[],
-        )
+        },
+        template="video",
+    )
+
+    return CollectionResult(
+        source_type="video",
+        title=title,
+        content_preview=body[:500],
+        url=url,
+        note_path=note["note_path"],
+        gbrain_slug=note["note_id"],
+        extractor="yt-dlp",
+        metadata={
+            "video_id": video_id,
+            "platform": platform,
+            "subtitle_count": len(subtitles),
+        },
+        subtitles=[s.get("text", "") for s in subtitles if isinstance(s, dict)],
+    )
 
 
-def collect_video(url: str) -> CollectionResult:
-    return VideoCollector().collect(url)
+def collect_video(url: str, strategy: str = "auto") -> CollectionResult:
+    return enhanced_collect_video(url, extract_subtitles_flag=(strategy != "metadata_only"))

@@ -32,6 +32,9 @@ from .channels import (
 )
 from .video_adapter import VideoAdapter, VideoContent, VideoMetadata, resolve_video_adapter
 from .analysis import migrate_knowledge_object, SCHEMA_VERSIONS
+from .parse_router import parse_with_routing, batch_parse, ENGINE_REGISTRY, score_engine_for_file
+from .hybrid_search import hybrid_search, vector_search, rrf_fusion
+from .reranker import rerank as rerank_results
 
 # 工具全集索引
 TOOL_INVENTORY = {
@@ -115,4 +118,12 @@ __all__ = [
     "VideoContent",
     "VideoMetadata",
     "resolve_video_adapter",
+    "parse_with_routing",
+    "batch_parse",
+    "ENGINE_REGISTRY",
+    "score_engine_for_file",
+    "hybrid_search",
+    "vector_search",
+    "rrf_fusion",
+    "rerank_results",
 ]
