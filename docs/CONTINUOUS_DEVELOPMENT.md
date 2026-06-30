@@ -2526,3 +2526,234 @@ Existing */30 * * * * rclone copy targets onedrive:Obsidian/学习笔记/学习�
 - knowledge_discovery.py: executed successfully
 - All existing cron entries preserved (verified via crontab -l)
 
+
+## 2026-06-30 Session Completion Summary
+
+### All work completed this session
+
+#### Code implementation (8 files changed, 2 files created)
+
+| File | Change | Purpose |
+|------|--------|---------|
+| src/knowledge_collector/analysis.py | +schema migration utility | migrate_knowledge_object(), _compact_knowledge_object(), SCHEMA_VERSIONS |
+| src/knowledge_collector/note_generator.py | +content-hash dedup | _find_existing_note() prevents duplicate note creation |
+| scripts/sensitive_scan.py | +knowledge JSON scan + false-positive filter | scan_knowledge_json(), self-exclusion, rclone doc exclusion |
+| scripts/knowledge_fetch_router.py | +--agent-home CLI, proper argparse | Multi-agent support |
+| scripts/knowledge_discovery.py | +--agent-home, --days CLI | Multi-agent support |
+| scripts/lightweight_recall.py | +--agent-home CLI | Multi-agent support |
+| scripts/knowledge_analysis.py | +--agent-home passthrough | Multi-agent support |
+| docs/knowledge-object-schema.md | NEW | Full v1 schema specification |
+| docs/api-reference.md | NEW | Complete public API reference |
+| docs/CONTINUOUS_DEVELOPMENT.md | +4 sections | Next-phase planning, A+C implementation, A1 cron |
+
+#### Infrastructure
+
+| Action | Result |
+|--------|--------|
+| Server git clean | git status empty |
+| Server KMM installed | /root/.hermes/knowledge-plugin/, /root/.hermes/scripts/ |
+| Server cron | 2 KMM entries added (nightly + discovery), 22 existing preserved |
+| GitHub push | 5 commits pushed, matches server HEAD |
+| Local sync | Robocopy mirror from GitHub clone |
+
+#### Test results
+
+| Check | Result |
+|-------|--------|
+| python -m compileall src scripts tests | passed |
+| pytest -q | 40 passed |
+| python scripts/kmm_e2e_smoke.py | ok: true |
+| python scripts/sensitive_scan.py | scan ok (58 files) |
+| ash /root/.hermes/scripts/verify_plugin.sh | all checks passed |
+
+### Commit chain (server = GitHub = local)
+
+`
+129d75a ← docs: record A1 cron cutover complete
+4e6401d ← feat: Tier A+C improvements [A6,C1,C3,P0.2,A3,C4]
+8472205 ← docs: add next-phase full planning (Tier A-C, P0-P5)
+25cb65f ← docs: record Tier A+C implementation results
+74977b9 ← fix: harden document parse fallback (baseline)
+`
+
+---
+
+## Next-Direction Analysis
+
+### Current capability map
+
+`
+                KMM v0.1.0
+                     |
+     ┌───────────────┼───────────────┐
+     |               |               |
+  Acquisition    Analysis        Retrieval/Sync
+  ───────────    ────────        ─────────────
+  web ✅         schema v1 ✅    local FTS ✅
+  article ✅     deterministic   notes RAG ✅
+  video 🟡       LLM hook 🔲     state FTS5 ✅
+  document 🟡    concepts ✅     Hindsight ✅
+  book ✅        claims ✅       gbrain ✅
+  channels 🔲    actions ✅      cloud sync ✅
+                 risks ✅
+                 timeline ✅       Observability
+                 quality ✅       ─────────────
+                                 health json 🔲
+                                 metrics 🔲
+                                 MCP server 🔲
+`
+
+✅ = implemented and tested  
+🟡 = basic implementation, needs enrichment  
+🔲 = not yet implemented
+
+### Current quality self-assessment
+
+| Dimension | Score | Note |
+|-----------|-------|------|
+| Code completeness | 70% | Core runtime ready; video/document/channel enrichment pending |
+| Test coverage | 75% | 40 tests; fresh-install/upgrade/uninstall not covered |
+| Documentation | 80% | README, api-ref, schema doc exist; channel/ops guides needed |
+| Production readiness | 65% | Installed on server, cron active; no health artifacts yet |
+| Multi-agent portability | 75% | AGENT_HOME-based, --agent-home CLI; still some Hermes assumptions |
+| Retrieval quality | 50% | Basic layer merge; no rerank, hybrid, or query rewrite |
+| Security | 85% | Env-driven creds, sensitive scan, knowledge JSON scan |
+| Observability | 30% | No KMM health artifacts, no metrics, no alert integration |
+
+### What should come next: weighted priority
+
+The remaining work from the full plan (Tier A-C, P0-P5) is analyzed below with practical priority weighting based on current code state and server environment.
+
+#### 🟢 P0.3-P0.5: Production hardening (high impact, moderate effort)
+
+**Fresh-install / upgrade / uninstall tests**
+
+Why now: the server now runs KMM from installed scripts. Fresh-install validation ensures new team members can replicate the environment. Upgrade tests protect existing data. Uninstall safety is a baseline reliability requirement.
+
+Recommended implementation:
+- 	ests/test_fresh_install.py: install to temp AGENT_HOME, verify all managed scripts, imports, directory structure
+- 	ests/test_upgrade.py: baseline install → create notes → upgrade → verify notes preserved
+- 	ests/test_uninstall.py: verify script removal, data preservation, rclone config preservation
+
+Estimated effort: 2-3 days
+
+---
+
+#### 🟢 P2.1: Query preprocessing (high impact, moderate effort)
+
+**Why now**: current retrieval merges layers by raw score. A 50-line query expansion module would improve recall measurably.
+
+Recommended implementation:
+- src/knowledge_collector/query_rewrite.py
+- expand_query(query): synonym expansion, spell correction heuristics
+- detect_language(query): route zh queries to Chinese-prioritized search
+- extract_entities(query): regex-based entity detection for exact-match boost
+- deterministic default; optional LLM enrichment via KMM_QUERY_LLM_PROVIDER
+
+Why this first: it's the smallest code change with the largest retrieval quality impact. Even basic synonym expansion improves search behavior noticeably.
+
+Estimated effort: 1-2 days
+
+---
+
+#### 🟡 P0.3-P0.5: Agent-agnostic cleanup (moderate impact, low effort)
+
+**Why now**: --agent-home is now on 4 scripts. Remaining Hermes-specific assumptions in docs and defaults should be audited.
+
+Recommended cleanup:
+- grep all files for HERMES_HOME-only paths without AGENT_HOME fallback
+- update README to describe Claude Code / Codex / Cursor directory layouts
+- add --agent-home to remaining scripts that use esolve_agent_home() but lack CLI override
+
+Estimated effort: 1 day
+
+---
+
+#### 🟡 P1.1: Document routing upgrade (high impact, high effort)
+
+**Why later**: doc_parse_router already has 4-engine fallback chain. Adding Docling/MinerU is valuable but depends on external dependencies that may not be available on all deployments.
+
+Recommended staged approach:
+1. Add engine capability descriptors to doc_parse_router (supported formats, OCR, table preservation)
+2. Add scored routing based on file type detection
+3. Add Docling as optional engine (parse_with_docling)
+4. Add MinerU as optional engine (parse_with_mineru)
+5. Add file-hash caching
+
+Why staged: each stage is independently shippable. Docling/MinerU are heavy dependencies that should be optional.
+
+Estimated effort: 5-7 days total across stages
+
+---
+
+#### 🟡 P3.1-P3.2: Video pipeline basics (high impact, high effort)
+
+**Why later**: video collection currently creates basic capture notes. Scene detection and OCR are important for high-quality video notes but require significant dependencies (PySceneDetect, PaddleOCR, ffmpeg integration).
+
+Recommended staged approach:
+1. Add yt-dlp subtitle/transcript extraction as first-class path
+2. Add PySceneDetect scene boundary detection
+3. Add keyframe selection
+4. Add PaddleOCR frame text extraction
+5. Timeline chunking and mixed-media note rendering
+
+Estimated effort: 7-10 days
+
+---
+
+#### 🟢 Sidecar integration: knowledge JSON indexing (high impact, moderate effort)
+
+**Why now**: KMM produces *.knowledge.json files. The memory sidecar already indexes Markdown notes but doesn't consume knowledge objects. This is the single most impactful integration improvement.
+
+Recommended approach:
+1. Extend knowledge_notes.py in hermes-memory-installer to also read *.knowledge.json
+2. Add knowledge_object_index table to governance schema
+3. Index concepts, claims, action items, risks, quality scores
+4. Add object-level retrieval to 	iered_context_injector.py
+5. Add source_object_id and schema_version to recall output
+
+Estimated effort: 3-4 days (requires changes in both repos)
+
+---
+
+### Recommended next-session execution order
+
+`
+Session 2 (1-2 hours):
+  1. P0.3 test_fresh_install.py
+  2. P0.5 test_uninstall.py
+  3. P0.3 agent-agnostic audit + doc fixes
+
+Session 3 (2-3 hours):
+  4. P2.1 query rewrite module
+  5. P2.5 test_retrieval_quality.py (fixtures)
+  6. P1.1 document router engine registry
+
+Session 4 (3-4 hours):
+  7. Sidecar knowledge JSON indexing (hermes-memory-installer side)
+  8. A4 cross-project integration test
+  9. P1.2-P1.3 Docling/MinerU optional engines
+`
+
+### Long-term horizon (Sessions 5+)
+
+These are documented in the full plan above:
+- P3 full video pipeline (PySceneDetect + PaddleOCR + timeline notes)
+- P4 defended-channel ingestion (WeChat, XHS, Reddit, HN, CSDN)
+- P5 observability + MCP server
+- A5 LLM extractor hook
+- C1-C5 continuing optimization
+
+### Key architectural principle for next phase
+
+The single most valuable architectural improvement is **always**:
+
+`	ext
+source adapter → normalized ContentBlock → knowledge object → note rendering
+                                                              → sidecar indexing
+                                                              → retrieval
+                                                              → sync
+`
+
+Every new feature should emit the same pipeline. No new source should create its own downstream format. This keeps KMM coherent as it grows.
+
