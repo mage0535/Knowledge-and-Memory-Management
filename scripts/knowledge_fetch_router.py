@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -27,10 +28,18 @@ from knowledge_collector.web import collect_web
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: knowledge_fetch_router.py <url>", file=sys.stderr)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-home", default=os.environ.get("AGENT_HOME", ""))
+    parser.add_argument("url", nargs="?", default="")
+    args, _ = parser.parse_known_args()
+    if args.agent_home:
+        os.environ["AGENT_HOME"] = args.agent_home
+    if not args.url and len(sys.argv) >= 2:
+        args.url = next((a for a in sys.argv[1:] if not a.startswith("--")), "")
+    if not args.url:
+        print("usage: knowledge_fetch_router.py <url> [--agent-home PATH]", file=sys.stderr)
         return 1
-    result = collect_web(sys.argv[1])
+    result = collect_web(args.url)
     print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
     return 0
 

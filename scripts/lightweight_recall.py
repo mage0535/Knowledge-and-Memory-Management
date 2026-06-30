@@ -129,9 +129,12 @@ def recall(query: str, limit: int) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-home", default=os.environ.get("AGENT_HOME", ""))
     parser.add_argument("--query", required=True)
     parser.add_argument("--limit", type=int, default=5)
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
+    if args.agent_home:
+        os.environ["AGENT_HOME"] = args.agent_home
     print(json.dumps(recall(args.query, args.limit), ensure_ascii=False, indent=2))
     return 0
 

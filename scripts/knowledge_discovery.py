@@ -66,7 +66,14 @@ def ingest_to_gbrain(note: dict) -> dict:
 
 
 def main() -> int:
-    days = int(os.environ.get("KMM_DISCOVERY_DAYS", "7"))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-home", default=os.environ.get("AGENT_HOME", ""))
+    parser.add_argument("--days", type=int, default=int(os.environ.get("KMM_DISCOVERY_DAYS", "7")))
+    args, _ = parser.parse_known_args()
+    if args.agent_home:
+        os.environ["AGENT_HOME"] = args.agent_home
+    days = args.days
     notes = discover_new_notes(days=days)
     payload = {"notes": notes, "count": len(notes)}
     print(json.dumps(payload, ensure_ascii=False, indent=2))

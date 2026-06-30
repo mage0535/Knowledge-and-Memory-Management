@@ -418,3 +418,34 @@ def dumps_knowledge(knowledge: dict[str, Any]) -> str:
     """Serialize a knowledge object with stable formatting."""
 
     return json.dumps(knowledge, ensure_ascii=False, indent=2, sort_keys=True)
+
+def migrate_knowledge_object(obj: dict[str, Any], target_version: str) -> dict[str, Any]:
+    """Migrate a knowledge object to a target schema version."""
+    current = obj.get("schema_version", "kmm.knowledge_object.v1")
+    if current == target_version:
+        return obj
+    migrations: dict[tuple[str, str], Any] = {
+        ("kmm.knowledge_object.v1", "kmm.knowledge_object.v1"): lambda o: o,
+    }
+    key = (current, target_version)
+    if key in migrations:
+        result = migrations[key](dict(obj))
+        result["schema_version"] = target_version
+        return result
+    raise ValueError(
+        f"No migration path from {current} to {target_version}. "
+        f"Supported versions: {sorted(set(k for ks in migrations for k in ks))}"
+    )
+
+
+def _compact_knowledge_object(obj: dict[str, Any]) -> dict[str, Any]:
+    """Remove optional empty fields to reduce storage size."""
+    optional_empty = ("action_items", "open_questions", "risks", "timeline", "metadata")
+    result = dict(obj)
+    for key in optional_empty:
+        if key in result and not result[key]:
+            del result[key]
+    return result
+
+
+SCHEMA_VERSIONS = ["kmm.knowledge_object.v1"]
