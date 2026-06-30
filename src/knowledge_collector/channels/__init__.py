@@ -68,6 +68,9 @@ def list_supported_platforms() -> list[str]:
     return list(CHANNEL_REGISTRY.keys())
 
 
-# Auto-register built-in adapters
-import knowledge_collector.channels.hackernews  # noqa: E402, F401
-import knowledge_collector.channels.wechat  # noqa: E402, F401
+# Auto-register built-in adapters (optional, may fail if deps missing)
+for _mod in ("hackernews", "wechat", "reddit", "csdn", "xiaohongshu"):
+    try:
+        __import__(f"knowledge_collector.channels.{_mod}", fromlist=["_"])
+    except (ImportError, ModuleNotFoundError):
+        pass

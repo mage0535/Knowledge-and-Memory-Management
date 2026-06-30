@@ -35,6 +35,9 @@ from .analysis import migrate_knowledge_object, SCHEMA_VERSIONS
 from .parse_router import parse_with_routing, batch_parse, ENGINE_REGISTRY, score_engine_for_file
 from .hybrid_search import hybrid_search, vector_search, rrf_fusion
 from .reranker import rerank as rerank_results
+from .note_translator import translate_note_content
+from .scene_detector import detect_scenes, select_keyframes, extract_timeline_chunks, ocr_frame
+from .analysis import extract_relations as extract_knowledge_relations
 
 # 工具全集索引
 TOOL_INVENTORY = {

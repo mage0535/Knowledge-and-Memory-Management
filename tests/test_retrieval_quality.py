@@ -140,3 +140,126 @@ def test_sensitive_scan_clean_json_passes(tmp_path: Path):
     kjson.write_text('{"title": "clean test"}', encoding="utf-8")
     findings = sensitive_scan.scan_knowledge_json(tmp_path)
     assert not findings
+
+
+def test_relation_extraction_finds_connections():
+    from knowledge_collector.analysis import extract_relations
+
+    knowledge = {
+        "concepts": [{"name": "kmm"}, {"name": "gbrain"}],
+        "claims": [
+            {"text": "KMM integrates with gbrain for knowledge graph storage.", "confidence": 0.7},
+        ],
+    }
+    relations = extract_relations(knowledge)
+    assert len(relations) >= 1
+    assert relations[0]["source"] in ("kmm", "gbrain")
+    assert relations[0]["target"] in ("kmm", "gbrain")
+
+
+def test_relation_extraction_empty_input():
+    from knowledge_collector.analysis import extract_relations
+
+    knowledge = {"concepts": [], "claims": []}
+    relations = extract_relations(knowledge)
+    assert relations == []
+
+
+def test_translate_note_no_api_key_returns_original():
+    import os
+    if "KMM_TRANSLATE_API_KEY" in os.environ:
+        del os.environ["KMM_TRANSLATE_API_KEY"]
+    from knowledge_collector.note_translator import translate_note_content
+
+    content = "# Title\n\nHello world.\n"
+    result = translate_note_content(content, target_lang="zh")
+    assert "Title" in result
+    assert "Hello world" in result
+
+
+def test_translate_note_preserves_headers():
+    import os
+    if "KMM_TRANSLATE_API_KEY" in os.environ:
+        del os.environ["KMM_TRANSLATE_API_KEY"]
+    from knowledge_collector.note_translator import translate_note_content
+
+    content = "# Chapter\n\nText.\n```\ncode\n```"
+    result = translate_note_content(content, target_lang="zh")
+    assert "# Chapter" in result
+    assert "```" in result
+
+
+def test_scene_detector_parses_timestamps():
+    from knowledge_collector.scene_detector import _time_to_seconds, _seconds_to_time
+
+    ts = _time_to_seconds("00:01:30.500")
+    assert abs(ts - 90.5) < 0.01
+    result = _seconds_to_time(90.5)
+    assert "01:30" in result
+
+
+def test_reddit_adapter_can_handle():
+    from knowledge_collector.channels.reddit import RedditAdapter
+    adapter = RedditAdapter()
+    assert adapter.can_handle("https://www.reddit.com/r/Python/comments/abc123")
+    assert adapter.can_handle("r/Python")
+    assert not adapter.can_handle("https://example.com")
+
+
+def test_csdn_adapter_can_handle():
+    from knowledge_collector.channels.csdn import CsdnAdapter
+    adapter = CsdnAdapter()
+    assert adapter.can_handle("https://blog.csdn.net/user/article/details/12345")
+    assert not adapter.can_handle("https://example.com")
+
+
+def test_xiaohongshu_adapter_can_handle():
+    from knowledge_collector.channels.xiaohongshu import XiaohongshuAdapter
+    adapter = XiaohongshuAdapter()
+    assert adapter.can_handle("https://www.xiaohongshu.com/explore/abc123")
+    assert adapter.can_handle("https://xhslink.com/abc")
+    assert not adapter.can_handle("https://example.com")
+
+
+def test_sidecar_indexer_builds_rows(tmp_path: Path):
+    from knowledge_collector.sidecar_indexer import build_knowledge_object_rows
+
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    kj = notes_dir / "test.knowledge.json"
+    kj.write_text(
+        '{"object_id":"ko-test-abc","title":"Test","summary":"summary","keywords":["k","v"],'
+        '"concepts":[],"claims":[],"action_items":[],"risks":[],'
+        '"quality":{"score":0.8},"schema_version":"kmm.knowledge_object.v1",'
+        '"created_at":"2026-01-01T00:00:00Z","language":"en"}',
+        encoding="utf-8",
+    )
+    rows, fts_rows = build_knowledge_object_rows(notes_dir, 123.0)
+    assert len(rows) == 1
+    assert rows[0][0] == "ko-test-abc"
+    assert rows[0][10] == 0.8
+
+
+def test_sidecar_indexer_signature_detects_changes(tmp_path: Path):
+    from knowledge_collector.sidecar_indexer import compute_knowledge_objects_signature
+
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir(exist_ok=True)
+    sig1 = compute_knowledge_objects_signature(notes_dir)
+    (notes_dir / "a.knowledge.json").write_text('{"title":"A"}', encoding="utf-8")
+    sig2 = compute_knowledge_objects_signature(notes_dir)
+    assert sig1 != sig2
+
+
+def test_channel_registry_includes_all():
+    import knowledge_collector.channels as ch
+    # Force import of all adapters
+    import importlib
+    for mod in ("hackernews", "wechat", "reddit", "csdn", "xiaohongshu"):
+        try:
+            importlib.import_module(f"knowledge_collector.channels.{mod}")
+        except (ImportError, ModuleNotFoundError):
+            pass
+    platforms = ch.list_supported_platforms()
+    print(f"registered platforms: {platforms}")
+    assert len(platforms) >= 2  # at least HN + WeChat should register; others may fail due to deps

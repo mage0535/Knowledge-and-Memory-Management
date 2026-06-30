@@ -449,3 +449,49 @@ def _compact_knowledge_object(obj: dict[str, Any]) -> dict[str, Any]:
 
 
 SCHEMA_VERSIONS = ["kmm.knowledge_object.v1"]
+
+
+RELATION_MARKERS = (
+    "uses", "depends on", "relates to", "implements", "extends",
+    "provides", "requires", "supports", "integrates with",
+    "calls", "delegates to", "composes", "contains",
+    "references", "links to", "connects to",
+    "使用", "依赖", "调用", "集成", "继承", "实现",
+)
+
+
+def extract_relations(knowledge: dict[str, Any]) -> list[dict[str, Any]]:
+    concepts = knowledge.get("concepts", [])
+    claims = knowledge.get("claims", [])
+    relations = []
+
+    concept_names = {c.get("name", "").lower() for c in concepts if c.get("name")}
+
+    for claim in claims:
+        text = claim.get("text", "")
+        if len(text) < 10:
+            continue
+        text_lower = text.lower()
+        for marker in RELATION_MARKERS:
+            idx = text_lower.find(marker)
+            if idx < 0:
+                continue
+            source = _find_nearest_concept(text[:idx], concept_names)
+            target = _find_nearest_concept(text[idx + len(marker):], concept_names)
+            if source and target and source != target:
+                relations.append({
+                    "source": source,
+                    "target": target,
+                    "relation": marker,
+                    "evidence": text[:200],
+                    "confidence": claim.get("confidence", 0.5),
+                })
+    return relations[:30]
+
+
+def _find_nearest_concept(text_segment: str, concept_names: set[str]) -> str | None:
+    text_lower = text_segment.lower()
+    for name in concept_names:
+        if name in text_lower:
+            return name
+    return next(iter(concept_names), None) if concept_names else None
