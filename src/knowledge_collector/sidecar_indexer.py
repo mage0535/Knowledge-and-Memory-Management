@@ -48,7 +48,7 @@ def build_knowledge_object_rows(notes_dir: Path, indexed_at: float) -> tuple[lis
         row = (
             object_id, source_path, schema_version, title, summary, keywords,
             concepts, claims, action_items, risks, quality_score, created_at, language,
-            indexed_at, float(kjson.stat().st_mtime),
+            search_text, indexed_at, float(kjson.stat().st_mtime),
         )
         rows.append(row)
 
@@ -88,13 +88,13 @@ CREATE TABLE IF NOT EXISTS knowledge_object_index (
     quality_score REAL NOT NULL DEFAULT 0.0,
     created_at TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL DEFAULT 'unknown',
+    search_text TEXT NOT NULL DEFAULT '',
     indexed_at REAL NOT NULL DEFAULT 0.0,
     modified_at REAL NOT NULL DEFAULT 0.0
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_object_index_fts USING fts5(
-    object_id, source_path, title, summary, keywords, search_text,
-    content='knowledge_object_index', content_rowid='rowid'
+    object_id, source_path, title, summary, keywords, search_text
 );
 """
 
@@ -132,8 +132,8 @@ def refresh_knowledge_object_index(
         """INSERT INTO knowledge_object_index (
             object_id, source_path, schema_version, title, summary, keywords,
             concepts_json, claims_json, action_items, risks, quality_score,
-            created_at, language, indexed_at, modified_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            created_at, language, search_text, indexed_at, modified_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     )
     for fts_row in fts_rows:
