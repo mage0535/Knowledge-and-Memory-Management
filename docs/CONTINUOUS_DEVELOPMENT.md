@@ -3080,3 +3080,323 @@ source adapter → normalized ContentBlock → knowledge object → note renderi
 2. P2.2 hybrid search with Qdrant
 3. P3.2-P3.5 video pipeline PySceneDetect + PaddleOCR integration
 
+
+## 2026-06-30 A1-B3 Expansion Implementation
+
+### Session overview
+
+Following the next-direction analysis, items A1 through B3 were implemented in a single autonomous session. 4 new modules created, 3 existing modules enhanced. All optional dependencies guarded by ImportError/FileNotFoundError fallbacks.
+
+---
+
+### A1: Sidecar Knowledge-Object Indexer
+
+New file: src/knowledge_collector/sidecar_indexer.py
+
+Provides functions the memory sidecar can import to extend governance indexing:
+
+| Function | Purpose |
+|----------|---------|
+| uild_knowledge_object_rows() | Scans *.knowledge.json, builds indexed rows with concepts, claims, actions, risks, quality score |
+| compute_knowledge_objects_signature() | Content-hash signature for incremental rebuild gating |
+| ensure_object_schema() | Creates knowledge_object_index + knowledge_object_index_fts tables |
+| efresh_knowledge_object_index() | Full rebuild cycle with signature check, delete-then-insert, governance_meta tracking |
+
+**Sidecar integration path:**
+
+`python
+# In memory_governance_rebuild.py:
+from knowledge_collector.sidecar_indexer import refresh_knowledge_object_index
+obj_stats = refresh_knowledge_object_index(gov, notes_dir=notes_dir, indexed_at=now)
+`
+
+**Schema:** 15 columns including object_id (PK), concepts_json, claims_json, ction_items, isks, quality_score, schema_version, language, created_at.
+
+---
+
+### A2: Hybrid Vector Retrieval
+
+New file: src/knowledge_collector/hybrid_search.py
+
+| Component | Description |
+|-----------|-------------|
+| ector_search(query) | Optional Qdrant vector search via qdrant-client |
+| _embed_query(query) | Optional embedding: OpenAI text-embedding-3-small or sentence-transformers |
+| rf_fusion(list_a, list_b) | Reciprocal Rank Fusion (k=60) for combining lexical + vector results |
+| hybrid_search(lexical, query) | Main entry: calls vector_search → RRF fusion → deduplicated ranking |
+
+**Env config:**
+- KMM_QDRANT_URL / KMM_QDRANT_COLLECTION — Qdrant connection
+- KMM_EMBED_FN=openai|sentence_transformers — embedding provider
+- KMM_EMBED_MODEL — embedding model name
+
+All paths guarded by ImportError. When Qdrant/embedding unavailable, falls back to lexical-only results.
+
+---
+
+### B1: Reranker Integration
+
+New file: src/knowledge_collector/reranker.py
+
+| Function | Description |
+|----------|-------------|
+| erank(query, documents) | Jina AI reranker API (primary) |
+| _localfallback_rerank(query, documents) | Keyword-hit weighted scoring (fallback) |
+
+**Reranker pipeline:**
+
+`	ext
+fused results (20 docs) → rerank(top_20) → reorder by rerank_score
+                                                metadata: retrieval_score, rerank_score
+`
+
+**Env config:**
+- KMM_RERANKER_API_KEY — Jina API key
+- KMM_RERANKER_MODEL — defaults to jina-reranker-v2-base-multilingual
+
+When API key absent, uses local keyword-hit weighted scoring.
+
+---
+
+### B2: Multi-Engine Document Routing
+
+New file: src/knowledge_collector/parse_router.py
+
+Replaces the linear fallback chain in doc_parse_router.py with a scored engine registry:
+
+| Engine | Formats | Features |
+|--------|---------|----------|
+| markitdown | pdf/docx/pptx/xlsx/html/csv/json/xml | Table preservation |
+| pdftotext | pdf | Fast text, layout mode |
+| plaintext | txt/md/json/csv/xml/html/yaml/yml | Direct read, no deps |
+
+| Function | Description |
+|----------|-------------|
+| egister_engine(name, caps, fn) | Self-registration pattern |
+| score_engine_for_file(path, name) | File-type-aware engine scoring (0.0-1.0) |
+| select_engines(path) | Auto-select engine priority by file extension |
+| parse_with_routing(path) | Multi-engine fallback with attempt logging |
+| atch_parse(paths, workers) | ThreadPoolExecutor parallel batch processing |
+| _cached_or_parse(path, engine, fn) | SHA256 file-hash cache at ~/.cache/kmm-parsers/ |
+
+**Cache behavior:** File hash computed once. Parse results stored as JSON. Subsequent calls skip re-parse on cache hit.
+
+---
+
+### A3: Enhanced Video Extraction
+
+Modified file: src/knowledge_collector/video.py (rewrite)
+
+| Feature | Description |
+|---------|-------------|
+| detect_platform(url) | Auto-detects YouTube/Bilibili/TikTok/Douyin from URL domain |
+| extract_metadata(url) | yt-dlp --dump-json metadata extraction |
+| extract_subtitles(url, langs) | yt-dlp --write-auto-sub VTT subtitle extraction |
+| _parse_vtt(text) | WebVTT parser → list of subtitle dicts |
+| _extract_id_from_url(url) | Regex video-id extraction from URL query params |
+| enhanced_collect_video(url) | Full pipeline: metadata → subtitles → transcript → note |
+
+**Platform subtitle language defaults:**
+- YouTube: en, zh-Hans, ja, ko
+- Bilibili: zh-Hans, en
+- TikTok: en
+- Douyin: zh-Hans
+
+youtube.com/watch?v=abc123 → output: ideo_id= abc123
+
+---
+
+### Integration: notes_rag.py Search Pipeline
+
+The search() method now runs a 3-stage pipeline:
+
+`	ext
+1. query preprocessing     → preprocess_query(query)
+2. 4-layer parallel search → local_md + state_db + Hindsight + gbrain
+3. hybrid vector fusion     → hybrid_search(fused, query)    [optional Qdrant]
+4. reranker refinement      → rerank(query, fused[:20])      [optional Jina]
+`
+
+All stages are guarded by ImportError — the pipeline degrades gracefully to basic layer merge when optional dependencies are absent.
+
+---
+
+### Validation
+
+`
+python -m compileall src scripts tests     → passed
+python -m pytest -q                        → 62 passed
+python scripts/sensitive_scan.py           → scan ok (70 files)
+`
+
+---
+
+## Final State Assessment
+
+### Module inventory growth
+
+| Metric | Session Start | Session End |
+|--------|-------------|------------|
+| Python modules (src/) | 15 | **24** |
+| Test files | 4 | **6** |
+| Tests passing | 40 | **62** |
+| Scanned files | 58 | **70** |
+| Commits | 3 (baseline) | **10** |
+
+### Full module map
+
+`
+src/
+├── __init__.py
+├── runtime_support.py
+├── mcp_server.py                    ★ new (P5.4)
+├── cloud_sync/__init__.py
+├── knowledge_augmentation/
+│   ├── __init__.py
+│   ├── anysearch_client.py
+│   ├── augmented_search.py
+│   └── config.py
+├── knowledge_collector/
+│   ├── __init__.py
+│   ├── analysis.py                  + migration utility (A6)
+│   ├── article.py                   + channel routing (P4)
+│   ├── document.py
+│   ├── hybrid_search.py             ★ new (A2)
+│   ├── note_generator.py            + dedup (C1)
+│   ├── parse_router.py              ★ new (B2)
+│   ├── query_rewrite.py             ★ new (P2.1)
+│   ├── refinement.py
+│   ├── reranker.py                  ★ new (B1)
+│   ├── sidecar_indexer.py           ★ new (A1)
+│   ├── video.py                     + subtitle extraction (A3)
+│   ├── video_adapter.py             ★ new (P3.1)
+│   ├── web.py
+│   └── channels/
+│       ├── __init__.py              ★ new (P4.6)
+│       ├── hackernews.py            ★ new (P4.4)
+│       └── wechat.py                ★ new (P4.1)
+├── notes_rag/
+│   └── __init__.py                  + query rewrite + hybrid + rerank
+└── sensenova/__init__.py
+
+scripts/
+├── kmm_health_check.py              ★ new (P5.2)
+├── sensitive_scan.py                + knowledge JSON scan (C3)
+├── knowledge_discovery.py           + --agent-home (P0.2)
+├── lightweight_recall.py            + --agent-home (P0.2)
+├── knowledge_fetch_router.py        + --agent-home (P0.2)
+├── knowledge_analysis.py            + --agent-home (P0.2)
+└── ... (14 existing scripts)
+
+tests/
+├── test_public_api.py               (existing)
+├── test_ops_scripts.py              (existing)
+├── test_linux_runtime.py            (existing)
+├── test_release_assets.py           (existing)
+├── test_production_hardening.py     ★ new (P0.3-P0.5)
+└── test_retrieval_quality.py        ★ new (P2.5)
+
+docs/
+├── api-reference.md                 ★ new (C4)
+├── knowledge-object-schema.md       ★ new (A3)
+├── CONTINUOUS_DEVELOPMENT.md        + 6 major sections
+└── ... (8 existing docs)
+
+root/
+└── capability.yaml                  ★ new (P5.5)
+`
+
+---
+
+## Remaining Gap Analysis
+
+### What is complete
+
+| Layer | Status | Key evidence |
+|-------|--------|-------------|
+| Multi-source acquisition | ✅ | web, video (enhanced), article (enhanced), document, book, channel adapters |
+| Knowledge analysis | ✅ | deterministic v1 schema, migration, dedup |
+| Note rendering | ✅ | Markdown + JSON sidecar |
+| Multi-layer retrieval | ✅ | FTS5 + Hindsight + gbrain + optional hybrid + optional rerank |
+| Query preprocessing | ✅ | language detection, synonym expansion, entity extraction |
+| Cloud sync | ✅ | rclone 12+ drivers, cron active |
+| Server production | ✅ | installed, cron active, git clean |
+| Security | ✅ | sensitive scanning (paths, credentials, knowledge JSON) |
+| Documentation | ✅ | schema spec, API reference, continuous development journal |
+| Testing | ✅ | 62 tests, e2e smoke, compileall, sensitive scan |
+| Multi-agent | ✅ | AGENT_HOME contract, --agent-home CLI, capability manifest |
+| MCP exposure | ✅ | stdio server, 5 tools |
+| Observability | ✅ | health artifacts, sidecar-ready indexer |
+| Channel ingestion | ✅ | WeChat, HackerNews, registry framework |
+
+### What remains (genuinely new work, not more of the same)
+
+#### 🔲 Cross-project integration
+
+**Sidecar knowledge-object consumption**
+KMM now produces indexable knowledge objects and provides the sidecar_indexer.py module. The hermes-memory-installer memory_governance_rebuild.py needs to call efresh_knowledge_object_index() alongside its existing efresh_knowledge_note_index() call. This is a 5-line change in the sidecar, but it's the single highest-value remaining integration.
+
+Effort: 30 minutes. Dependency: modify hermes-memory-installer code.
+
+#### 🔲 GraphRAG edge extraction
+
+KMM extracts concepts, claims, and evidence. Adding relation extraction (concept A relates to concept B via claim C) would enable proper graph edges. This feeds gbrain and future GraphRAG retrieval.
+
+Effort: 1 session. New function in analysis.py: extract_relations(knowledge_object) -> list[Relation].
+
+#### 🔲 Multi-language translation layer
+
+KMM detects source language. Adding a note-generation translation stage would enable: Chinese WeChat article → English note. This makes cross-platform knowledge consumable by agents in their preferred language.
+
+Effort: 1 session. New file: 
+ote_translator.py. Optional LLM-based translation.
+
+#### 🔲 Complete video pipeline (PySceneDetect + PaddleOCR)
+
+The framework and basic extraction are done. Scene detection and frame OCR are the remaining video pipeline components.
+
+Effort: 2 sessions. Dependencies: PySceneDetect CLI, PaddleOCR Python.
+
+#### 🔲 Remaining channel adapters
+
+Xiaohongshu (image-first OCR), Reddit (structured thread), CSDN (article normalization). The registry and common contracts are ready.
+
+Effort: 1 session each.
+
+### What does NOT need more work
+
+- **More source adapters**: the 40+ tool inventory in collection-pipeline.md is aspirational documentation, not missing code. The current 24 modules cover the core integration surface.
+- **More script wrappers**: 20 managed scripts is sufficient for operational coverage.
+- **More test quantity**: 62 tests covering public API, operations, production hardening, and retrieval quality is proportionate to the codebase size (~5000 lines Python).
+
+### Architecture completeness
+
+`	ext
+                  KMM v0.1.0
+                       |
+      ┌────────────────┼─────────────────┐
+      |                |                  |
+   Acquisition      Analysis         Retrieval/Sync
+   ───────────      ────────         ─────────────
+   web ✅           schema v1 ✅     query rewrite ✅
+   article ✅       deterministic ✅ hybrid (opt) ✅
+   video 🟡         concepts ✅      reranker (opt) ✅
+   document 🟡      claims ✅        cloud sync ✅
+   book ✅          actions ✅
+   HN/WeChat ✅     risks ✅           Observability
+   registry ✅      timeline ✅       ─────────────
+                    migration ✅      health json ✅
+                                      capability ✅
+                                      MCP server ✅
+                                      scan ✅
+                                      sidecar idx ✅
+
+✅ = production-grade     🟡 = basic, depth needed     🔲 = not started
+`
+
+### Final assessment
+
+KMM has moved from a tool inventory document (40+ aspirational tools) to a working, tested, documented, production-deployed knowledge platform with 24 modules, 62 tests, and clear integration boundaries with the memory sidecar. The remaining gaps are depth refinement (scene OCR, graph edges, translation), not breadth (more source types).
+
+The project is ready for the next stage: cross-project integration and real-world data pipeline validation.
+
